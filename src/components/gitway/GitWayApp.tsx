@@ -9,14 +9,11 @@ import {
   CAT_META,
   CAT_ORDER,
   CMDS,
-  LEADERBOARD_SEED,
   LESSONS,
   PHASE_IDS,
   PHASE_META,
-  PROFILES,
   TOTAL_LESSONS,
   type Command,
-  type Profile,
 } from "@/lib/gitway-data";
 
 type Screen = "login" | "roadmap" | "trainer" | "lesson" | "quiz" | "progress";
@@ -1089,18 +1086,16 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
       return { icon: earned ? b.icon : "fa-solid fa-lock", name: b.name, desc: b.desc, cardStyle, iconWrap, textColor: earned ? "" : "color:#a7b6b1;" };
     });
 
-    const lb = LEADERBOARD_SEED.map((x) => ({
-      name: PROFILES[x[0]].name,
-      initials: PROFILES[x[0]].initials,
-      color: PROFILES[x[0]].color,
-      xp: x[1],
-      you: false,
-      icon: undefined as string | undefined,
-    }));
-    lb.push({ name: user.name, initials: user.initials, color: user.color, xp: s.xp, you: true, icon: user.icon });
-    lb.sort((a, b) => b.xp - a.xp);
+    // Рейтинг — лише наші 5 відділів. XP кожного беремо з його збереженого
+    // прогресу (поточний акаунт — з активного стану).
+    const rows = ACCOUNTS.map((acc) => {
+      const you = s.user?.key === acc.key;
+      const xp = you ? s.xp : loadProgress(acc.key)?.xp ?? 0;
+      return { name: acc.name, color: acc.color, icon: acc.icon as string | undefined, xp, you };
+    });
+    rows.sort((a, b) => b.xp - a.xp);
     let rank = 1;
-    const leaderboard = lb.map((l, i) => {
+    const leaderboard = rows.map((l, i) => {
       const rk = i + 1;
       if (l.you) rank = rk;
       const rowStyle = "display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid #eef3f1;" + (l.you ? "background:#eafaf7;" : "");
@@ -1109,7 +1104,7 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
       else if (rk === 2) rankStyle += "background:#dbe3e0;color:#5b6d68;";
       else if (rk === 3) rankStyle += "background:#e6c48a;color:#7a5a1e;";
       else rankStyle += "background:#eef3f1;color:#8b9c97;";
-      return { rank: rk, name: l.you ? l.name + " (ви)" : l.name, initials: l.initials, color: l.color, xp: l.xp, rowStyle, rankStyle, icon: l.icon };
+      return { rank: rk, name: l.you ? l.name + " (ви)" : l.name, initials: "", color: l.color, xp: l.xp, rowStyle, rankStyle, icon: l.icon };
     });
 
     return (
