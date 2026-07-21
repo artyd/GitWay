@@ -67,11 +67,10 @@ src/
 
 ## Деплой
 
+Git-репозиторій вже ініціалізовано і перший коміт зроблено. Залишилось
+підключити ваш GitHub-репозиторій і запушити:
+
 ```bash
-git init
-git add .
-git commit -m "Перший каркас GitШлях"
-git branch -M main
 git remote add origin <URL_ВАШОГО_РЕПОЗИТОРІЮ>
 git push -u origin main
 ```
