@@ -1,98 +1,93 @@
-@import "tailwindcss";
-
-:root {
-  /* Base surfaces — тёплий світло-м'ятний фон з прототипу */
-  --background: #e7ede9;
-  --surface: #ffffff;
-  --surface-soft: #f2f7f4;
-
-  /* Text */
-  --foreground: #1e2a24;
-  --foreground-muted: #5c6b63;
-
-  /* Phase accents — узгоджено з роадмап-діаграмою курсу */
-  --accent-teal: #14b8a6;
-  --accent-teal-soft: #ccf3ed;
-  --accent-blue: #4c8bf5;
-  --accent-blue-soft: #dbe7fd;
-  --accent-amber: #f5a623;
-  --accent-amber-soft: #fde9c8;
-
-  --border-soft: rgba(30, 42, 36, 0.08);
-  --border-strong: rgba(30, 42, 36, 0.14);
-
-  /* Claymorphism shadows */
-  --shadow-clay: 0 1px 2px rgba(30, 42, 36, 0.04), 0 12px 24px -8px rgba(30, 42, 36, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  --shadow-clay-hover: 0 2px 4px rgba(30, 42, 36, 0.06), 0 20px 32px -8px rgba(30, 42, 36, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-surface: var(--surface);
-  --color-surface-soft: var(--surface-soft);
-  --color-foreground: var(--foreground);
-  --color-foreground-muted: var(--foreground-muted);
-  --color-teal: var(--accent-teal);
-  --color-teal-soft: var(--accent-teal-soft);
-  --color-blue: var(--accent-blue);
-  --color-blue-soft: var(--accent-blue-soft);
-  --color-amber: var(--accent-amber);
-  --color-amber-soft: var(--accent-amber-soft);
-  --color-border-soft: var(--border-soft);
-  --color-border-strong: var(--border-strong);
-
-  --font-display: var(--font-unbounded);
-  --font-sans: var(--font-golos);
-}
+/* GitШлях — базові стилі, перенесені 1:1 з прототипу (claymorphism, тепла м'ятна тема) */
 
 * {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
 }
 
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-sans), system-ui, sans-serif;
+  min-height: 100vh;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+body {
+  font-family: var(--font-nunito), "Nunito", system-ui, sans-serif;
+  color: #14332f;
+  background: #e7ede9;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.disp {
+  font-family: var(--font-baloo), var(--font-nunito), "Baloo 2", "Nunito", sans-serif;
+  margin: 0;
+}
+
+button,
+input {
+  font-family: inherit;
+}
+
+input::placeholder {
+  color: #6f8681;
+  opacity: 1;
+}
+
+/* ---- анімації з прототипу ---- */
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 12px 22px -6px rgba(20, 184, 166, 0.55), 0 0 0 0 rgba(20, 184, 166, 0.5);
+  }
+  50% {
+    box-shadow: 0 12px 22px -6px rgba(20, 184, 166, 0.55), 0 0 0 16px rgba(20, 184, 166, 0);
   }
 }
 
-:focus-visible {
-  outline: 3px solid var(--accent-teal);
-  outline-offset: 2px;
-  border-radius: 4px;
+@keyframes floatUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-@layer components {
-  .clay-card {
-    background: var(--surface);
-    border-radius: 28px;
-    border: 1px solid var(--border-soft);
-    box-shadow: var(--shadow-clay);
+@keyframes popIn {
+  0% {
+    transform: scale(0.82);
+    opacity: 0;
   }
-
-  .clay-card-soft {
-    background: var(--surface-soft);
-    border-radius: 24px;
-    border: 1px solid var(--border-soft);
+  60% {
+    transform: scale(1.05);
   }
-
-  .clay-btn {
-    border-radius: 999px;
-    font-weight: 600;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  100% {
+    transform: scale(1);
+    opacity: 1;
   }
+}
 
-  .clay-btn:active {
-    transform: scale(0.97);
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
   }
 }

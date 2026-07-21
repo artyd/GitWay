@@ -1,21 +1,21 @@
 import type { Metadata } from "next";
-import { Unbounded, Golos_Text } from "next/font/google";
-import { config } from "@fortawesome/fontawesome-svg-core";
-import "@fortawesome/fontawesome-svg-core/styles.css";
+import { Nunito, Baloo_2 } from "next/font/google";
+import "@fortawesome/fontawesome-free/css/all.min.css";
 import "./globals.css";
 
-config.autoAddCss = false;
-
-const unbounded = Unbounded({
-  variable: "--font-unbounded",
+const nunito = Nunito({
+  variable: "--font-nunito",
   subsets: ["latin", "cyrillic"],
-  weight: ["600", "700", "800"],
+  weight: ["400", "600", "700", "800"],
+  display: "swap",
 });
 
-const golos = Golos_Text({
-  variable: "--font-golos",
-  subsets: ["latin", "cyrillic"],
-  weight: ["400", "500", "600", "700"],
+// Baloo 2 має лише латиницю — для кирилиці автоматично підхопиться Nunito.
+const baloo = Baloo_2({
+  variable: "--font-baloo",
+  subsets: ["latin"],
+  weight: ["600", "700", "800"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -30,13 +30,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="uk"
-      className={`${unbounded.variable} ${golos.variable} h-full antialiased`}
-    >
-      <body className="min-h-full flex flex-col bg-background text-foreground">
-        {children}
-      </body>
+    <html lang="uk" className={`${nunito.variable} ${baloo.variable}`}>
+      <body>{children}</body>
     </html>
   );
 }
