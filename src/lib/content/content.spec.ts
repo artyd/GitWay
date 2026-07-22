@@ -19,13 +19,26 @@ describe("завантаження курсів у LESSONS", () => {
     expect(phase5[0].id).toBe(24);
   });
 
-  it("кожен урок CLI-курсів має 5-питальний командний квіз і sandbox", () => {
+  it("кожен урок CLI-курсів має 5-питальний командний квіз, аудіо й опис", () => {
     for (const l of LESSONS.filter((x) => x.phase >= 4)) {
       expect(l.commandQuiz).toBeDefined();
       expect(l.commandQuiz).toHaveLength(5);
-      expect(l.sandbox.steps.length).toBeGreaterThan(0);
+      expect(l.audio).toMatch(/^\/audio\/(claude|codex)-\d\d\.mp3$/); // справжнє аудіо
+      expect(l.sections[0].body.length).toBeGreaterThan(0); // опис уроку є
       expect(Array.isArray(l.quiz)).toBe(true); // нормалізовано до []
+      for (const q of l.commandQuiz!) {
+        expect(q.scenario).toBeTruthy();
+        expect(q.explanation).toBeTruthy();
+        // вибір обовʼязковий: options (>=2) + коректний correct
+        expect(Array.isArray(q.options) && q.options!.length >= 2).toBe(true);
+        expect(typeof q.correct === "number" && q.correct! >= 0 && q.correct! < q.options!.length).toBe(true);
+        // ввід — додатковий спосіб (є у наших уроках)
+        if (q.accept) expect(q.accept.length).toBeGreaterThan(0);
+      }
     }
+    // усі CLI-питання мають і вибір, і додатковий ввід
+    const cli = LESSONS.filter((x) => x.phase >= 4);
+    expect(cli.every((l) => l.commandQuiz!.every((q) => q.options && q.accept))).toBe(true);
   });
 
   it("базові 11 уроків лишились MCQ (без commandQuiz)", () => {
@@ -50,6 +63,8 @@ describe("валідація контенту падає гучно", () => {
       sandbox: { title: "s", intro: "i", steps: [{ do: "x", res: "y" }] },
       commandQuiz: Array.from({ length: 5 }, () => ({
         scenario: "s",
+        options: ["git init", "git status", "ls", "cd"],
+        correct: 0,
         accept: [{ kind: "literal" as const, value: "git init" }],
         explanation: "e",
       })),
@@ -109,7 +124,7 @@ describe("уніфікований каталог", () => {
   it("усі cmd-посилання квізів існують у каталозі", () => {
     for (const l of LESSONS) {
       for (const q of l.commandQuiz ?? []) {
-        for (const a of q.accept) {
+        for (const a of q.accept ?? []) {
           if (a.kind === "cmd") expect(CATALOG_IDS.has(a.id)).toBe(true);
         }
       }

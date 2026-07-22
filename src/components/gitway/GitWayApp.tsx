@@ -6,6 +6,7 @@ import { Clay, Icon } from "./ui";
 import { AudioPlayer } from "./AudioPlayer";
 import { SandboxPanel } from "./sandbox/SandboxPanel";
 import { CliPanel } from "./cli/CliPanel";
+import { LessonContent } from "./LessonContent";
 import { GitEngine } from "@/lib/git-engine/store";
 import { loadWorkspace } from "@/lib/git-engine/persistence";
 import { createSeedWorkspace } from "@/lib/git-engine/seed";
@@ -257,12 +258,20 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
     set({ selected: oi, answered: true, correct: s.correct + (oi === q.correct ? 1 : 0) });
   };
   // Командний квіз: перевірка введеної команди за accept-патернами.
+  // Відповідь введенням команди (додатковий спосіб) — зараховується як відповідь.
   const cmdCheck = () => {
-    if (s.cmdChecked) return;
+    if (s.answered) return;
     const q = activeLesson.commandQuiz?.[s.quizIndex];
-    if (!q || !s.cmdInput.trim()) return;
+    if (!q || !q.accept || !s.cmdInput.trim()) return;
     const ok = matchesAccept(s.cmdInput, q.accept);
-    set({ cmdChecked: true, cmdOk: ok, correct: s.correct + (ok ? 1 : 0) });
+    set({ answered: true, cmdChecked: true, cmdOk: ok, selected: ok ? q.correct ?? null : -1, correct: s.correct + (ok ? 1 : 0) });
+  };
+  // Відповідь вибором варіанта (основний спосіб).
+  const cmdMcqPick = (oi: number) => {
+    if (s.answered) return;
+    const q = activeLesson.commandQuiz?.[s.quizIndex];
+    if (!q || q.correct == null) return;
+    set({ selected: oi, answered: true, correct: s.correct + (oi === q.correct ? 1 : 0) });
   };
   const quizNext = () => {
     const total = quizCount(activeLesson);
@@ -753,74 +762,68 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
         </div>
         <h1 className="disp" style={sx("font-size:32px;font-weight:800;letter-spacing:-.7px;margin-bottom:20px")}>{al.title}</h1>
 
-        {/* video (без звуку) */}
-        {al.video ? (
+        {/* video — показуємо плеєр лише коли відео є (для CLI-уроків його поки нема) */}
+        {al.video && (
           <div style={sx("width:100%;aspect-ratio:16/9;border-radius:26px;overflow:hidden;margin-bottom:22px;background:#0f2a27;box-shadow:0 18px 40px -18px rgba(17,74,68,.35),inset 0 0 0 1px rgba(17,74,68,.05)")}>
             <video src={al.video} controls playsInline preload="metadata" style={{ width: "100%", height: "100%", display: "block", objectFit: "cover" }} />
           </div>
-        ) : (
-          al.commandQuiz && (
-            <div style={sx("width:100%;aspect-ratio:16/9;border-radius:26px;margin-bottom:22px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#eef3f1;color:#8b9c97;box-shadow:inset 0 0 0 2px rgba(17,74,68,.08)")}>
-              <Icon name="fa-solid fa-film" style={sx("font-size:34px")} />
-              <span style={sx("font-weight:800;font-size:15px")}>Відео-слот</span>
-              <span style={sx("font-size:13px")}>Відео до уроку буде додано</span>
-            </div>
-          )
         )}
 
         {/* окрема озвучка уроку */}
-        {al.audio ? (
-          <AudioPlayer src={al.audio} />
-        ) : (
-          al.commandQuiz && (
-            <div style={sx("display:flex;align-items:center;gap:12px;padding:16px 20px;border-radius:20px;margin-bottom:0;background:#f5f8f7;color:#8b9c97;box-shadow:inset 0 0 0 2px rgba(17,74,68,.06)")}>
-              <Icon name="fa-solid fa-headphones" style={sx("font-size:20px")} />
-              <span style={sx("font-weight:800;font-size:14px")}>Аудіо-слот</span>
-              <span style={sx("font-size:13px")}>Озвучку уроку буде додано</span>
+        {al.audio && <AudioPlayer src={al.audio} />}
+
+        {/* analogy — лише для класичних уроків (CLI-курси дають опис у теорії) */}
+        {!al.commandQuiz && (
+          <div style={sx("display:flex;gap:16px;padding:22px 24px;border-radius:24px;margin-bottom:22px;background:#fff;box-shadow:0 14px 32px -18px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 11px rgba(255,255,255,.9)")}>
+            <span style={sx("flex:none;display:grid;place-items:center;width:50px;height:50px;border-radius:16px;background:#fef3e6;color:#f2994a;font-size:22px;box-shadow:inset 0 -3px 6px rgba(242,153,74,.12),inset 0 3px 5px rgba(255,255,255,.7)")}>
+              <Icon name="fa-solid fa-lightbulb" />
+            </span>
+            <div>
+              <div style={sx("display:inline-block;font-size:12px;font-weight:800;color:#f2994a;letter-spacing:.5px;margin-bottom:6px")}>АНАЛОГІЯ</div>
+              <p style={sx("margin:0;font-size:16.5px;line-height:1.6;color:#3f524e;text-wrap:pretty;white-space:pre-line")}>{al.analogy}</p>
             </div>
-          )
+          </div>
         )}
 
-        {/* analogy */}
-        <div style={sx("display:flex;gap:16px;padding:22px 24px;border-radius:24px;margin-bottom:22px;background:#fff;box-shadow:0 14px 32px -18px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 11px rgba(255,255,255,.9)")}>
-          <span style={sx("flex:none;display:grid;place-items:center;width:50px;height:50px;border-radius:16px;background:#fef3e6;color:#f2994a;font-size:22px;box-shadow:inset 0 -3px 6px rgba(242,153,74,.12),inset 0 3px 5px rgba(255,255,255,.7)")}>
-            <Icon name="fa-solid fa-lightbulb" />
-          </span>
-          <div>
-            <div style={sx("display:inline-block;font-size:12px;font-weight:800;color:#f2994a;letter-spacing:.5px;margin-bottom:6px")}>АНАЛОГІЯ</div>
-            <p style={sx("margin:0;font-size:16.5px;line-height:1.6;color:#3f524e;text-wrap:pretty;white-space:pre-line")}>{al.analogy}</p>
+        {/* опис уроку: CLI-курси — блоковий рендер з підсвіткою; решта — звичайна теорія */}
+        {al.commandQuiz ? (
+          <LessonContent lesson={al} accent={am.color} />
+        ) : (
+          <div style={sx("border-radius:26px;background:#fff;padding:26px 28px;margin-bottom:22px;box-shadow:0 16px 36px -22px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 11px rgba(255,255,255,.9)")}>
+            {al.sections.map((sec, si) => (
+              <div key={si} style={sx(si > 0 ? "margin-top:22px;padding-top:22px;border-top:1px solid #eef3f1" : "")}>
+                {sec.h && <h3 className="disp" style={sx("font-size:19px;font-weight:800;color:#14332f;margin-bottom:10px")}>{sec.h}</h3>}
+                {sec.body.map((b, bi) =>
+                  b.startsWith("• ") ? (
+                    <div key={bi} style={sx("display:flex;gap:10px;margin-top:7px")}>
+                      <span style={sx("flex:none;margin-top:9px;width:7px;height:7px;border-radius:50%;background:#14b8a6")} />
+                      <span style={sx("font-size:15.5px;line-height:1.55;color:#3f524e")}>{b.slice(2)}</span>
+                    </div>
+                  ) : (
+                    <p key={bi} style={sx("margin:7px 0 0;font-size:15.5px;line-height:1.6;color:#3f524e;text-wrap:pretty")}>{b}</p>
+                  ),
+                )}
+              </div>
+            ))}
           </div>
-        </div>
+        )}
 
-        {/* theory */}
-        <div style={sx("border-radius:26px;background:#fff;padding:26px 28px;margin-bottom:22px;box-shadow:0 16px 36px -22px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 11px rgba(255,255,255,.9)")}>
-          {al.sections.map((sec, si) => (
-            <div key={si} style={sx(si > 0 ? "margin-top:22px;padding-top:22px;border-top:1px solid #eef3f1" : "")}>
-              <h3 className="disp" style={sx("font-size:19px;font-weight:800;color:#14332f;margin-bottom:10px")}>{sec.h}</h3>
-              {sec.body.map((b, bi) =>
-                b.startsWith("• ") ? (
-                  <div key={bi} style={sx("display:flex;gap:10px;margin-top:7px")}>
-                    <span style={sx("flex:none;margin-top:9px;width:7px;height:7px;border-radius:50%;background:#14b8a6")} />
-                    <span style={sx("font-size:15.5px;line-height:1.55;color:#3f524e")}>{b.slice(2)}</span>
-                  </div>
-                ) : (
-                  <p key={bi} style={sx("margin:7px 0 0;font-size:15.5px;line-height:1.6;color:#3f524e;text-wrap:pretty")}>{b}</p>
-                ),
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* заклик до практики у вкладці «Пісочниця» */}
+        {/* заклик до практики: CLI-уроки → вкладка CLI, решта → Пісочниця */}
         <div style={sx("display:flex;align-items:center;gap:16px;padding:20px 24px;border-radius:24px;background:linear-gradient(120deg,#0f2a27,#14413a);color:#eafaf7;box-shadow:0 20px 44px -20px rgba(17,74,68,.5)")}>
           <span style={sx("flex:none;display:grid;place-items:center;width:52px;height:52px;border-radius:16px;background:rgba(45,212,191,.18);color:#7ee6d3;font-size:22px")}>
-            <Icon name="fa-solid fa-terminal" />
+            <Icon name={al.commandQuiz ? "fa-solid fa-robot" : "fa-solid fa-terminal"} />
           </span>
           <div style={sx("flex:1;min-width:0")}>
-            <div style={sx("font-weight:800;font-size:17px;margin-bottom:3px")}>Спробуйте на практиці у Пісочниці</div>
-            <div style={sx("color:#9fd8cd;font-size:14px;line-height:1.5")}>Справжній термінал і клон GitHub — виконуйте команди цього уроку без ризику.</div>
+            <div style={sx("font-weight:800;font-size:17px;margin-bottom:3px")}>
+              {al.commandQuiz ? "Спробуйте команди у вкладці CLI" : "Спробуйте на практиці у Пісочниці"}
+            </div>
+            <div style={sx("color:#9fd8cd;font-size:14px;line-height:1.5")}>
+              {al.commandQuiz
+                ? "Симулятор Claude Code / Codex — виконуйте команди цього уроку без ризику."
+                : "Справжній термінал і клон GitHub — виконуйте команди цього уроку без ризику."}
+            </div>
           </div>
-          <Clay onClick={goSandbox} base="flex:none;display:inline-flex;align-items:center;gap:9px;padding:12px 20px;border:none;cursor:pointer;border-radius:15px;font-weight:800;font-size:14.5px;color:#0f2a27;background:#2dd4bf;box-shadow:0 12px 22px -10px rgba(45,212,191,.7);transition:transform .15s" hover="transform:translateY(-2px)">
+          <Clay onClick={al.commandQuiz ? goCli : goSandbox} base="flex:none;display:inline-flex;align-items:center;gap:9px;padding:12px 20px;border:none;cursor:pointer;border-radius:15px;font-weight:800;font-size:14.5px;color:#0f2a27;background:#2dd4bf;box-shadow:0 12px 22px -10px rgba(45,212,191,.7);transition:transform .15s" hover="transform:translateY(-2px)">
             Відкрити <Icon name="fa-solid fa-arrow-right" />
           </Clay>
         </div>
@@ -833,55 +836,96 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
   };
 
   // ---------- quiz ----------
-  // Питання командного квізу: сценарій + поле для введення команди.
+  // Питання CLI-квізу: основний спосіб — вибір варіанта; додатковий — ввести команду.
   const CommandQuestion = () => {
     const cq = activeLesson.commandQuiz!;
     const q = cq[s.quizIndex];
+    const nextLabel = s.quizIndex + 1 >= cq.length ? "Завершити урок" : "Наступне питання";
+    const opts = q.options ?? [];
+    const wasCorrect = s.cmdChecked ? s.cmdOk : s.selected === q.correct;
     const inpStyle = s.cmdChecked
       ? s.cmdOk
-        ? "width:100%;font-family:ui-monospace,Menlo,monospace;font-size:17px;font-weight:700;padding:15px 18px;border:none;border-radius:14px;background:#0f2a27;color:#7ee6d3;box-shadow:inset 0 0 0 2px #14b8a6;outline:none"
-        : "width:100%;font-family:ui-monospace,Menlo,monospace;font-size:17px;font-weight:700;padding:15px 18px;border:none;border-radius:14px;background:#0f2a27;color:#ff9b8a;box-shadow:inset 0 0 0 2px #e57373;outline:none"
-      : "width:100%;font-family:ui-monospace,Menlo,monospace;font-size:17px;font-weight:700;padding:15px 18px;border:none;border-radius:14px;background:#0f2a27;color:#eafaf7;box-shadow:inset 0 2px 8px rgba(0,0,0,.3);outline:none";
+        ? "width:100%;font-family:ui-monospace,Menlo,monospace;font-size:15px;font-weight:700;padding:12px 15px;border:none;border-radius:12px;background:#0f2a27;color:#7ee6d3;box-shadow:inset 0 0 0 2px #14b8a6;outline:none"
+        : "width:100%;font-family:ui-monospace,Menlo,monospace;font-size:15px;font-weight:700;padding:12px 15px;border:none;border-radius:12px;background:#0f2a27;color:#ff9b8a;box-shadow:inset 0 0 0 2px #e57373;outline:none"
+      : "width:100%;font-family:ui-monospace,Menlo,monospace;font-size:15px;font-weight:700;padding:12px 15px;border:none;border-radius:12px;background:#0f2a27;color:#eafaf7;box-shadow:inset 0 2px 8px rgba(0,0,0,.3);outline:none";
+
     return (
       <>
         <h1 className="disp" style={sx("font-size:24px;font-weight:800;letter-spacing:-.4px;margin-bottom:8px;line-height:1.3;text-wrap:pretty")}>{q.scenario}</h1>
         <p style={sx("margin:0 0 18px;color:#8b9c97;font-size:14px;font-weight:600")}>
-          <Icon name="fa-solid fa-keyboard" /> Введіть команду й натисніть Enter
+          <Icon name="fa-solid fa-list-check" /> Оберіть правильну команду
         </p>
-        <div style={sx("display:flex;align-items:center;gap:10px")}>
-          <span style={sx("font-family:ui-monospace,Menlo,monospace;font-size:18px;font-weight:800;color:#2dd4bf;flex:none")}>$</span>
-          <input
-            value={s.cmdInput}
-            onChange={(e) => { if (!s.cmdChecked) set({ cmdInput: e.target.value }); }}
-            onKeyDown={(e) => { if (e.key === "Enter") { if (s.cmdChecked) quizNext(); else cmdCheck(); } }}
-            placeholder="введіть команду…"
-            spellCheck={false}
-            autoCapitalize="off"
-            autoComplete="off"
-            aria-label="Поле введення команди"
-            style={sx(inpStyle)}
-          />
+        <div style={sx("display:flex;flex-direction:column;gap:12px")}>
+          {opts.map((label, oi) => {
+            const isSel = s.selected === oi;
+            const isCor = oi === q.correct;
+            let st = "display:flex;align-items:center;gap:14px;text-align:left;padding:15px 18px;border:none;border-radius:16px;font-family:ui-monospace,Menlo,monospace;font-weight:700;font-size:15px;transition:all .18s;background:#fff;";
+            let badge = "display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:9px;font-weight:800;font-size:13px;font-family:Nunito,sans-serif;";
+            if (!s.answered) {
+              st += "cursor:pointer;color:#14332f;box-shadow:inset 0 -4px 8px rgba(17,74,68,.045),inset 0 4px 7px rgba(255,255,255,.9),0 8px 18px -11px rgba(17,74,68,.2);";
+              badge += "background:#eef3f1;color:#5b6d68;";
+            } else if (isCor) {
+              st += "cursor:default;color:#0d7d70;background:#e5f8f3;box-shadow:inset 0 0 0 2px #14b8a6;";
+              badge += "background:#14b8a6;color:#fff;";
+            } else if (isSel) {
+              st += "cursor:default;color:#c0392b;background:#fdecea;box-shadow:inset 0 0 0 2px #e57373;";
+              badge += "background:#e57373;color:#fff;";
+            } else {
+              st += "cursor:default;color:#9aaba6;opacity:.6;";
+              badge += "background:#eef3f1;color:#9aaba6;";
+            }
+            return (
+              <button key={oi} onClick={() => cmdMcqPick(oi)} style={sx(st)}>
+                <span style={sx(badge)}>{String.fromCharCode(65 + oi)}</span>
+                <span style={sx("flex:1")}>{label}</span>
+                {s.answered && isCor && <Icon name="fa-solid fa-check" style={sx("color:#14b8a6")} />}
+                {s.answered && isSel && !isCor && <Icon name="fa-solid fa-xmark" style={sx("color:#e57373")} />}
+              </button>
+            );
+          })}
         </div>
-        {!s.cmdChecked && q.hint && (
-          <p style={sx("margin:12px 2px 0;color:#a7b6b1;font-size:13px;font-weight:600")}>
-            <Icon name="fa-solid fa-lightbulb" style={sx("color:#e6a15a")} /> Підказка: {q.hint}
-          </p>
+
+        {/* додатковий спосіб — ввести команду напам'ять */}
+        {q.accept && !s.answered && (
+          <div style={sx("margin-top:16px;padding:14px 16px;border-radius:16px;background:#f5f8f7;box-shadow:inset 0 0 0 1px rgba(17,74,68,.06)")}>
+            <div style={sx("font-size:12.5px;font-weight:800;color:#8b9c97;margin-bottom:9px")}>
+              <Icon name="fa-solid fa-keyboard" /> Знаєте напам'ять? Введіть команду замість вибору
+            </div>
+            <div style={sx("display:flex;gap:10px;align-items:center")}>
+              <input
+                value={s.cmdInput}
+                onChange={(e) => set({ cmdInput: e.target.value })}
+                onKeyDown={(e) => { if (e.key === "Enter") cmdCheck(); }}
+                placeholder="напр. git status…"
+                spellCheck={false}
+                autoCapitalize="off"
+                autoComplete="off"
+                aria-label="Поле введення команди"
+                style={sx(inpStyle)}
+              />
+              <button onClick={cmdCheck} style={sx("flex:none;padding:12px 16px;border:none;cursor:pointer;border-radius:12px;font-weight:800;font-size:14px;color:#0d7d70;background:#d8f3ee")}>
+                <Icon name="fa-solid fa-check-double" /> Ввід
+              </button>
+            </div>
+          </div>
         )}
-        {s.cmdChecked && (
+
+        {s.answered && (
           <>
-            <div style={sx("display:flex;align-items:flex-start;gap:10px;margin-top:18px;padding:14px 18px;border-radius:16px;font-weight:700;font-size:14.5px;line-height:1.5;" + (s.cmdOk ? "background:#e5f8f3;color:#0d7d70;" : "background:#fdecea;color:#c0392b;"))}>
-              <Icon name={s.cmdOk ? "fa-solid fa-circle-check" : "fa-solid fa-circle-info"} />{" "}
-              <span>{(s.cmdOk ? "Правильно! " : "Не зовсім. ") + q.explanation}</span>
+            {s.cmdChecked && (
+              <div style={sx("margin-top:14px;display:flex;align-items:center;gap:10px")}>
+                <span style={sx("font-family:ui-monospace,Menlo,monospace;font-size:16px;font-weight:800;color:#2dd4bf;flex:none")}>$</span>
+                <input value={s.cmdInput} readOnly aria-label="Введена команда" style={sx(inpStyle)} />
+              </div>
+            )}
+            <div style={sx("display:flex;align-items:flex-start;gap:10px;margin-top:16px;padding:14px 18px;border-radius:16px;font-weight:700;font-size:14.5px;line-height:1.5;" + (wasCorrect ? "background:#e5f8f3;color:#0d7d70;" : "background:#fdecea;color:#c0392b;"))}>
+              <Icon name={wasCorrect ? "fa-solid fa-circle-check" : "fa-solid fa-circle-info"} />{" "}
+              <span>{(wasCorrect ? "Правильно! " : "Не зовсім. ") + q.explanation}</span>
             </div>
             <button onClick={quizNext} style={sx("display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-top:16px;padding:16px;border:none;cursor:pointer;border-radius:18px;font-weight:800;font-size:16px;color:#fff;background:#14b8a6;box-shadow:0 14px 26px -10px rgba(20,184,166,.6),inset 0 -5px 10px rgba(6,95,85,.4),inset 0 5px 9px rgba(255,255,255,.32)")}>
-              {s.quizIndex + 1 >= activeLesson.commandQuiz!.length ? "Завершити урок" : "Наступне питання"} <Icon name="fa-solid fa-arrow-right" />
+              {nextLabel} <Icon name="fa-solid fa-arrow-right" />
             </button>
           </>
-        )}
-        {!s.cmdChecked && (
-          <button onClick={cmdCheck} style={sx("width:100%;margin-top:18px;padding:15px;border:none;cursor:pointer;border-radius:16px;font-weight:800;font-size:16px;color:#fff;background:#14b8a6;box-shadow:0 14px 26px -10px rgba(20,184,166,.6),inset 0 -5px 10px rgba(6,95,85,.4),inset 0 5px 9px rgba(255,255,255,.32)")}>
-            <Icon name="fa-solid fa-check-double" /> Перевірити
-          </button>
         )}
       </>
     );

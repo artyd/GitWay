@@ -10,12 +10,18 @@ export type AcceptPattern =
   | { kind: "regex"; source: string; flags?: string }
   | { kind: "cmd"; id: string }; // розкривається з accept/aliases/cmd запису каталогу
 
-/** Питання командного квізу: сценарій → введи команду; валідація за accept-патернами. */
+/**
+ * Питання квізу CLI-уроку. Два види (легший mix):
+ *  - введення: задано `accept` (валідація введеної команди за патернами);
+ *  - вибір: задано `options` + `correct` (обрати правильну команду зі списку).
+ */
 export type CommandQuizQuestion = {
   scenario: string;
-  accept: AcceptPattern[]; // будь-яке співпадіння = правильно
-  explanation: string; // показується після відповіді (правильної чи ні)
+  explanation: string; // показується після відповіді
   hint?: string;
+  accept?: AcceptPattern[]; // режим введення: будь-яке співпадіння = правильно
+  options?: string[]; // режим вибору: варіанти команд
+  correct?: number; // індекс правильного варіанта у options
 };
 
 /**
