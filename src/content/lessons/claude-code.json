@@ -171,7 +171,8 @@
           "explanation": "Обидва варіанти завершують поточну сесію Claude Code.",
           "hint": "/exit"
         }
-      ]
+      ],
+      "video": "/videos/claude-02.mp4"
     },
     {
       "icon": "fa-solid fa-folder-open",
@@ -256,7 +257,8 @@
           "explanation": "Передає вміст поточного поля вводу у зовнішній редактор для зручного редагування.",
           "hint": "Ctrl+G"
         }
-      ]
+      ],
+      "video": "/videos/claude-03.mp4"
     },
     {
       "icon": "fa-solid fa-file-lines",
@@ -341,7 +343,8 @@
           "explanation": "Відкриває панель конфігурації поточної установки Claude Code.",
           "hint": "/config"
         }
-      ]
+      ],
+      "video": "/videos/claude-04.mp4"
     },
     {
       "icon": "fa-solid fa-terminal",
