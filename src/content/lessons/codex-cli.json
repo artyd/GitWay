@@ -806,7 +806,8 @@
             }
           ]
         }
-      ]
+      ],
+      "video": "/videos/codex-07.mp4"
     },
     {
       "icon": "fa-solid fa-people-group",
@@ -919,7 +920,8 @@
             }
           ]
         }
-      ]
+      ],
+      "video": "/videos/codex-08.mp4"
     },
     {
       "icon": "fa-solid fa-plug",
