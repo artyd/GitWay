@@ -19,12 +19,18 @@ describe("завантаження курсів у LESSONS", () => {
     expect(phase5[0].id).toBe(24);
   });
 
-  it("кожен урок CLI-курсів має 5-питальний командний квіз і sandbox", () => {
+  it("кожен урок CLI-курсів має 5-питальний командний квіз, аудіо й опис", () => {
     for (const l of LESSONS.filter((x) => x.phase >= 4)) {
       expect(l.commandQuiz).toBeDefined();
       expect(l.commandQuiz).toHaveLength(5);
-      expect(l.sandbox.steps.length).toBeGreaterThan(0);
+      expect(l.audio).toMatch(/^\/audio\/(claude|codex)-\d\d\.mp3$/); // справжнє аудіо
+      expect(l.sections[0].body.length).toBeGreaterThan(0); // опис уроку є
       expect(Array.isArray(l.quiz)).toBe(true); // нормалізовано до []
+      for (const q of l.commandQuiz!) {
+        expect(q.scenario).toBeTruthy();
+        expect(q.explanation).toBeTruthy();
+        expect(q.accept.length).toBeGreaterThan(0);
+      }
     }
   });
 

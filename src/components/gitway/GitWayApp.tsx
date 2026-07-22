@@ -781,22 +781,24 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
           )
         )}
 
-        {/* analogy */}
-        <div style={sx("display:flex;gap:16px;padding:22px 24px;border-radius:24px;margin-bottom:22px;background:#fff;box-shadow:0 14px 32px -18px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 11px rgba(255,255,255,.9)")}>
-          <span style={sx("flex:none;display:grid;place-items:center;width:50px;height:50px;border-radius:16px;background:#fef3e6;color:#f2994a;font-size:22px;box-shadow:inset 0 -3px 6px rgba(242,153,74,.12),inset 0 3px 5px rgba(255,255,255,.7)")}>
-            <Icon name="fa-solid fa-lightbulb" />
-          </span>
-          <div>
-            <div style={sx("display:inline-block;font-size:12px;font-weight:800;color:#f2994a;letter-spacing:.5px;margin-bottom:6px")}>АНАЛОГІЯ</div>
-            <p style={sx("margin:0;font-size:16.5px;line-height:1.6;color:#3f524e;text-wrap:pretty;white-space:pre-line")}>{al.analogy}</p>
+        {/* analogy — лише для класичних уроків (CLI-курси дають опис у теорії) */}
+        {!al.commandQuiz && (
+          <div style={sx("display:flex;gap:16px;padding:22px 24px;border-radius:24px;margin-bottom:22px;background:#fff;box-shadow:0 14px 32px -18px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 11px rgba(255,255,255,.9)")}>
+            <span style={sx("flex:none;display:grid;place-items:center;width:50px;height:50px;border-radius:16px;background:#fef3e6;color:#f2994a;font-size:22px;box-shadow:inset 0 -3px 6px rgba(242,153,74,.12),inset 0 3px 5px rgba(255,255,255,.7)")}>
+              <Icon name="fa-solid fa-lightbulb" />
+            </span>
+            <div>
+              <div style={sx("display:inline-block;font-size:12px;font-weight:800;color:#f2994a;letter-spacing:.5px;margin-bottom:6px")}>АНАЛОГІЯ</div>
+              <p style={sx("margin:0;font-size:16.5px;line-height:1.6;color:#3f524e;text-wrap:pretty;white-space:pre-line")}>{al.analogy}</p>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* theory */}
+        {/* theory / опис уроку */}
         <div style={sx("border-radius:26px;background:#fff;padding:26px 28px;margin-bottom:22px;box-shadow:0 16px 36px -22px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 11px rgba(255,255,255,.9)")}>
           {al.sections.map((sec, si) => (
             <div key={si} style={sx(si > 0 ? "margin-top:22px;padding-top:22px;border-top:1px solid #eef3f1" : "")}>
-              <h3 className="disp" style={sx("font-size:19px;font-weight:800;color:#14332f;margin-bottom:10px")}>{sec.h}</h3>
+              {sec.h && <h3 className="disp" style={sx("font-size:19px;font-weight:800;color:#14332f;margin-bottom:10px")}>{sec.h}</h3>}
               {sec.body.map((b, bi) =>
                 b.startsWith("• ") ? (
                   <div key={bi} style={sx("display:flex;gap:10px;margin-top:7px")}>
@@ -811,16 +813,22 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
           ))}
         </div>
 
-        {/* заклик до практики у вкладці «Пісочниця» */}
+        {/* заклик до практики: CLI-уроки → вкладка CLI, решта → Пісочниця */}
         <div style={sx("display:flex;align-items:center;gap:16px;padding:20px 24px;border-radius:24px;background:linear-gradient(120deg,#0f2a27,#14413a);color:#eafaf7;box-shadow:0 20px 44px -20px rgba(17,74,68,.5)")}>
           <span style={sx("flex:none;display:grid;place-items:center;width:52px;height:52px;border-radius:16px;background:rgba(45,212,191,.18);color:#7ee6d3;font-size:22px")}>
-            <Icon name="fa-solid fa-terminal" />
+            <Icon name={al.commandQuiz ? "fa-solid fa-robot" : "fa-solid fa-terminal"} />
           </span>
           <div style={sx("flex:1;min-width:0")}>
-            <div style={sx("font-weight:800;font-size:17px;margin-bottom:3px")}>Спробуйте на практиці у Пісочниці</div>
-            <div style={sx("color:#9fd8cd;font-size:14px;line-height:1.5")}>Справжній термінал і клон GitHub — виконуйте команди цього уроку без ризику.</div>
+            <div style={sx("font-weight:800;font-size:17px;margin-bottom:3px")}>
+              {al.commandQuiz ? "Спробуйте команди у вкладці CLI" : "Спробуйте на практиці у Пісочниці"}
+            </div>
+            <div style={sx("color:#9fd8cd;font-size:14px;line-height:1.5")}>
+              {al.commandQuiz
+                ? "Симулятор Claude Code / Codex — виконуйте команди цього уроку без ризику."
+                : "Справжній термінал і клон GitHub — виконуйте команди цього уроку без ризику."}
+            </div>
           </div>
-          <Clay onClick={goSandbox} base="flex:none;display:inline-flex;align-items:center;gap:9px;padding:12px 20px;border:none;cursor:pointer;border-radius:15px;font-weight:800;font-size:14.5px;color:#0f2a27;background:#2dd4bf;box-shadow:0 12px 22px -10px rgba(45,212,191,.7);transition:transform .15s" hover="transform:translateY(-2px)">
+          <Clay onClick={al.commandQuiz ? goCli : goSandbox} base="flex:none;display:inline-flex;align-items:center;gap:9px;padding:12px 20px;border:none;cursor:pointer;border-radius:15px;font-weight:800;font-size:14.5px;color:#0f2a27;background:#2dd4bf;box-shadow:0 12px 22px -10px rgba(45,212,191,.7);transition:transform .15s" hover="transform:translateY(-2px)">
             Відкрити <Icon name="fa-solid fa-arrow-right" />
           </Clay>
         </div>
