@@ -429,7 +429,8 @@
           "explanation": "/branch і /fork створюють окремі гілки сесії для паралельної або альтернативної роботи.",
           "hint": "/branch"
         }
-      ]
+      ],
+      "video": "/videos/claude-05.mp4"
     },
     {
       "icon": "fa-solid fa-shield-halved",
@@ -514,7 +515,8 @@
           "explanation": "Auto Mode підходить для чітко окреслених завдань без чутливих даних, бажано в ізольованому середовищі.",
           "hint": "Auto"
         }
-      ]
+      ],
+      "video": "/videos/claude-06.mp4"
     },
     {
       "icon": "fa-solid fa-code-branch",
@@ -599,7 +601,8 @@
           "explanation": "Claude Code сам проаналізує diff і запропонує структурований опис PR.",
           "hint": "підготуй"
         }
-      ]
+      ],
+      "video": "/videos/claude-07.mp4"
     },
     {
       "icon": "fa-solid fa-people-group",
