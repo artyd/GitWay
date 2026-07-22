@@ -31,16 +31,15 @@ export function validateLessonFile(f: LessonFile): void {
         const atq = (msg: string) => at(`питання ${qi + 1}: ${msg}`);
         if (!q.scenario) throw new Error(atq("порожній scenario"));
         if (!q.explanation) throw new Error(atq("порожнє explanation"));
-        const hasOptions = Array.isArray(q.options) && q.options.length >= 2;
-        const hasAccept = Array.isArray(q.accept) && q.accept.length > 0;
-        if (hasOptions) {
-          if (typeof q.correct !== "number" || q.correct < 0 || q.correct >= q.options!.length) {
-            throw new Error(atq("некоректний correct для options"));
-          }
-        } else if (hasAccept) {
-          q.accept!.forEach((a) => validateAccept(a, atq));
-        } else {
-          throw new Error(atq("має бути або options+correct (вибір), або accept (введення)"));
+        // вибір відповіді обовʼязковий
+        if (!Array.isArray(q.options) || q.options.length < 2) throw new Error(atq("немає options (варіантів вибору)"));
+        if (typeof q.correct !== "number" || q.correct < 0 || q.correct >= q.options.length) {
+          throw new Error(atq("некоректний correct для options"));
+        }
+        // введення — опційний додатковий спосіб
+        if (q.accept !== undefined) {
+          if (!Array.isArray(q.accept) || q.accept.length === 0) throw new Error(atq("accept має бути непорожнім масивом"));
+          q.accept.forEach((a) => validateAccept(a, atq));
         }
       });
     }
