@@ -15,7 +15,7 @@ afterEach(cleanup);
 describe("Terminal (UI)", () => {
   it("виконує команду й показує вивід у скролбеку", () => {
     const engine = makeEngine();
-    render(<Terminal engine={engine} account="тест" />);
+    render(<Terminal backend={engine} account="тест" />);
     const input = screen.getByLabelText("Командний рядок терміналу") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "git status" } });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -26,7 +26,7 @@ describe("Terminal (UI)", () => {
 
   it("команда з терміналу відображається у моделі рушія", () => {
     const engine = makeEngine();
-    render(<Terminal engine={engine} account="тест" />);
+    render(<Terminal backend={engine} account="тест" />);
     const input = screen.getByLabelText("Командний рядок терміналу") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "echo привіт > note.txt" } });
     fireEvent.keyDown(input, { key: "Enter" });

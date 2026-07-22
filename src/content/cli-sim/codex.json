@@ -1,0 +1,88 @@
+{
+  "tool": "codex",
+  "prompt": "codex>",
+  "title": "codex cli — симуляція",
+  "seed": [
+    { "text": "OpenAI Codex CLI (симуляція) — навчальне середовище GitШлях.", "tone": "meta" },
+    { "text": "Спробуйте: /help, /approvals, /model, /diff, або опишіть задачу словами.", "tone": "hint" }
+  ],
+  "initialState": { "cwd": "~/project", "model": "gpt-5-codex", "approvals": "suggest" },
+  "entries": [
+    {
+      "match": { "kind": "exact", "value": "/help" },
+      "response": { "lines": [
+        { "text": "Доступні команди (симуляція):", "tone": "meta" },
+        { "text": "  /approvals  рівень підтвердження дій агента", "tone": "out" },
+        { "text": "  /model      обрати модель", "tone": "out" },
+        { "text": "  /diff       показати запропоновані зміни", "tone": "out" },
+        { "text": "  /new        нова сесія з чистим контекстом", "tone": "out" },
+        { "text": "  або опишіть задачу звичайною мовою", "tone": "hint" }
+      ] }
+    },
+    {
+      "match": { "kind": "exact", "value": "/approvals" },
+      "response": {
+        "setState": { "approvals": "auto-edit" },
+        "lines": [
+          { "text": "Рівні підтвердження (симуляція):", "tone": "meta" },
+          { "text": "  suggest     пропонувати, застосовувати вручну", "tone": "out" },
+          { "text": "  auto-edit   правити файли, питати перед командами", "tone": "out" },
+          { "text": "  full-auto   діяти без запитів (обережно)", "tone": "out" },
+          { "text": "✓ Обрано: auto-edit.", "tone": "add" }
+        ]
+      }
+    },
+    {
+      "match": { "kind": "prefix", "value": "/model" },
+      "response": {
+        "setState": { "model": "gpt-5-codex" },
+        "lines": [
+          { "text": "Доступні моделі (симуляція): gpt-5-codex · o4-mini", "tone": "meta" },
+          { "text": "✓ Обрано модель: gpt-5-codex.", "tone": "add" }
+        ]
+      }
+    },
+    {
+      "match": { "kind": "exact", "value": "/diff" },
+      "response": { "lines": [
+        { "text": "Запропоновані зміни (симуляція):", "tone": "meta" },
+        { "text": "+ додано src/pages/contacts.tsx", "tone": "add" },
+        { "text": "~ оновлено src/nav.tsx", "tone": "warn" },
+        { "text": "Застосувати? /approvals керує авто-режимом.", "tone": "hint" }
+      ] }
+    },
+    {
+      "match": { "kind": "exact", "value": "/new" },
+      "response": { "clear": true, "lines": [] }
+    },
+    {
+      "match": { "kind": "regex", "value": "^codex\\s+exec\\s+.+" },
+      "response": { "lines": [
+        { "text": "Неінтерактивне виконання (headless)…", "tone": "meta" },
+        { "text": "» {{arg}}", "tone": "hint" },
+        { "text": "✓ Задачу виконано (симуляція).", "tone": "add" }
+      ] }
+    },
+    {
+      "match": { "kind": "regex", "value": "^codex\\s+resume" },
+      "response": { "lines": [
+        { "text": "Відновлюю попередню сесію Codex…", "tone": "meta" },
+        { "text": "✓ Контекст завантажено.", "tone": "add" }
+      ] }
+    },
+    {
+      "match": { "kind": "prefix", "value": "/" },
+      "priority": -1,
+      "response": { "lines": [{ "text": "Невідома команда. Введіть /help для списку.", "tone": "err" }] }
+    }
+  ],
+  "fallback": {
+    "lines": [
+      { "text": "Аналізую задачу: «{{input}}»…", "tone": "meta" },
+      { "text": "Агент пропонує (симуляція):", "tone": "hint" },
+      { "text": "  1. створити/змінити потрібні файли", "tone": "out" },
+      { "text": "  2. показати дифф (/diff)", "tone": "out" },
+      { "text": "  3. застосувати після підтвердження", "tone": "out" }
+    ]
+  }
+}

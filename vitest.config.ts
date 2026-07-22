@@ -6,7 +6,12 @@ import { fileURLToPath } from "node:url";
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["src/lib/git-engine/**/*.spec.ts", "src/components/gitway/**/*.spec.tsx"],
+    include: [
+      "src/lib/git-engine/**/*.spec.ts",
+      "src/lib/cli-sim/**/*.spec.ts",
+      "src/lib/content/**/*.spec.ts",
+      "src/components/gitway/**/*.spec.tsx",
+    ],
     globals: false,
   },
   resolve: {

@@ -1,15 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { sx } from "@/lib/sx";
 import { Icon } from "../ui";
-import type { GitEngine } from "@/lib/git-engine/store";
 import type { OutLine, Tone } from "@/lib/git-engine/types";
-import { complete } from "@/lib/git-engine/complete";
-import { useEngineVersion } from "@/lib/git-engine/react/useEngine";
+import type { Completion } from "@/lib/git-engine/complete";
+import type { TerminalBackend } from "@/lib/terminal/backend";
+import { useBackendVersion } from "@/lib/terminal/backend";
 import { HOME } from "@/lib/git-engine/types";
 
 const HIST_PREFIX = "gitway:termhist:v1:";
+
+const DEFAULT_SEED: OutLine[] = [
+  { text: "GitШлях термінал — пісочниця Git. Введіть `help` для списку команд.", tone: "meta" },
+  { text: "Спробуйте: git status, ls, git log --oneline, git branch", tone: "hint" },
+];
+
+type CompleteFn = (line: string, cursor: number) => Completion;
 
 const toneColor: Record<Tone, string> = {
   out: "#c7f0e8",
@@ -32,41 +39,59 @@ function prettyCwd(cwd: string): string {
 
 type Line = OutLine & { key: number };
 
-export function Terminal({ engine, account }: { engine: GitEngine; account: string }) {
-  useEngineVersion(engine); // ре-рендер при зміні cwd/стану
-  const [lines, setLines] = useState<Line[]>(() => [
-    { key: 0, text: "GitШлях термінал — пісочниця Git. Введіть `help` для списку команд.", tone: "meta" },
-    { key: 1, text: "Спробуйте: git status, ls, git log --oneline, git branch", tone: "hint" },
-  ]);
+export type TerminalProps = {
+  backend: TerminalBackend;
+  account: string;
+  seedLines?: OutLine[];
+  promptFor?: (cwd: string) => string;
+  titleFor?: (cwd: string) => string;
+  complete?: CompleteFn;
+  historyKey?: string;
+};
+
+export function Terminal({
+  backend,
+  account,
+  seedLines,
+  promptFor,
+  titleFor,
+  complete: completeFn,
+  historyKey,
+}: TerminalProps) {
+  useBackendVersion(backend); // ре-рендер при зміні cwd/стану
+  const seed = seedLines ?? DEFAULT_SEED;
+  const [lines, setLines] = useState<Line[]>(() => seed.map((l, i) => ({ ...l, key: i })));
   const [input, setInput] = useState("");
-  const seq = useRef(2);
+  const seq = useRef(seed.length);
   const history = useRef<string[]>([]);
   const histIdx = useRef<number>(-1);
   const draft = useRef<string>("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const cwd = engine.cwd();
-  const prompt = useMemo(() => `${account}@gitway ${prettyCwd(cwd)} $`, [account, cwd]);
+  const histBucket = historyKey ?? account;
+  const cwd = backend.cwd();
+  const prompt = promptFor ? promptFor(cwd) : `${account}@gitway ${prettyCwd(cwd)} $`;
+  const title = titleFor ? titleFor(cwd) : `bash — ${prettyCwd(cwd)}`;
 
   // Завантажуємо історію команд з localStorage
   useEffect(() => {
     try {
-      const raw = window.localStorage.getItem(HIST_PREFIX + account);
+      const raw = window.localStorage.getItem(HIST_PREFIX + histBucket);
       history.current = raw ? (JSON.parse(raw) as string[]) : [];
     } catch {
       history.current = [];
     }
     histIdx.current = -1;
-  }, [account]);
+  }, [histBucket]);
 
   const persistHistory = useCallback(() => {
     try {
-      window.localStorage.setItem(HIST_PREFIX + account, JSON.stringify(history.current.slice(-200)));
+      window.localStorage.setItem(HIST_PREFIX + histBucket, JSON.stringify(history.current.slice(-200)));
     } catch {
       /* ignore */
     }
-  }, [account]);
+  }, [histBucket]);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -90,7 +115,7 @@ export function Terminal({ engine, account }: { engine: GitEngine; account: stri
         persistHistory();
       }
       histIdx.current = -1;
-      const res = engine.exec(line);
+      const res = backend.exec(line);
       // спецмаркер очищення
       if (res.lines.length === 1 && res.lines[0].text === "\x00CLEAR") {
         setLines([]);
@@ -98,13 +123,14 @@ export function Terminal({ engine, account }: { engine: GitEngine; account: stri
       }
       if (res.lines.length) push(res.lines);
     },
-    [engine, prompt, push, persistHistory],
+    [backend, prompt, push, persistHistory],
   );
 
   const doComplete = useCallback(() => {
+    if (!completeFn) return;
     const el = inputRef.current;
     const cursor = el ? el.selectionStart ?? input.length : input.length;
-    const res = complete(input, cursor, engine.workspace());
+    const res = completeFn(input, cursor);
     if (!res.candidates.length) return;
     if (res.candidates.length === 1 || res.commonPrefix.length > (cursor - res.replaceFrom)) {
       const before = input.slice(0, res.replaceFrom);
@@ -120,7 +146,7 @@ export function Terminal({ engine, account }: { engine: GitEngine; account: stri
       // кілька варіантів — показуємо їх
       push([{ text: prompt + " " + input, tone: "cmd" }, { text: res.candidates.join("   "), tone: "hint" }]);
     }
-  }, [input, engine, push, prompt]);
+  }, [input, completeFn, push, prompt]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -169,7 +195,7 @@ export function Terminal({ engine, account }: { engine: GitEngine; account: stri
         <span style={sx("width:12px;height:12px;border-radius:50%;background:#febc2e")} />
         <span style={sx("width:12px;height:12px;border-radius:50%;background:#28c840")} />
         <span style={sx("margin-left:8px;color:#6f9089;font-size:12.5px;font-weight:700")}>
-          <Icon name="fa-solid fa-terminal" /> bash — {prettyCwd(cwd)}
+          <Icon name="fa-solid fa-terminal" /> {title}
         </span>
       </div>
       <div

@@ -1,6 +1,14 @@
 // Увесь контент курсу GitШлях.
 // Профілі, уроки (згенеровано з текстів у teksty-urokiv), фази, команди тренажера.
 
+import type { CommandQuizQuestion, LessonFile } from "./content/types";
+import { CATALOG } from "./content/catalog";
+import { buildLessons } from "./content/loadLessons";
+import claudeCourse from "@/content/lessons/claude-code.json";
+import codexCourse from "@/content/lessons/codex-cli.json";
+
+export type { CommandQuizQuestion, AcceptPattern } from "./content/types";
+
 export type Profile = { id: number; name: string; role: string; initials: string; color: string };
 
 export type QuizQuestion = { text: string; opts: string[]; correct: number; expl: string };
@@ -19,6 +27,8 @@ export type Lesson = {
   sections: LessonSection[];
   sandbox: { title: string; intro: string; steps: SandboxStep[] };
   quiz: QuizQuestion[];
+  /** Командний квіз (нові CLI-курси): 5 питань «введи команду». */
+  commandQuiz?: CommandQuizQuestion[];
 };
 
 export type PhaseMeta = { name: string; sub: string; color: string; icon: string };
@@ -47,7 +57,8 @@ export const PROFILES: Profile[] = PROFILE_DEFS.map((x, i) => ({
   color: PROFILE_COLORS[i],
 }));
 
-export const LESSONS: Lesson[] = [
+// Базові 11 уроків (Git/GitHub) лишаються у TS; нові CLI-курси приходять із JSON.
+const TS_LESSONS: Lesson[] = [
   {
     "id": 1,
     "phase": 1,
@@ -1023,57 +1034,27 @@ export const LESSONS: Lesson[] = [
   }
 ];
 
+// Складаємо повний список уроків: базові 11 + курси з JSON (id 12-23, 24-35).
+export const LESSONS: Lesson[] = buildLessons(TS_LESSONS, [
+  claudeCourse as LessonFile,
+  codexCourse as LessonFile,
+]);
+
 export const TOTAL_LESSONS = LESSONS.length;
 
 export const PHASE_META: Record<number, PhaseMeta> = {
   1: { name: "Основи Git", sub: "ФАЗА 1 · ЛОКАЛЬНА РОБОТА", color: "#14b8a6", icon: "fa-solid fa-seedling" },
   2: { name: "GitHub і команда", sub: "ФАЗА 2 · СПІЛЬНА РОБОТА", color: "#3aa6c4", icon: "fa-solid fa-users" },
   3: { name: "AI-агенти", sub: "ФАЗА 3 · АВТОМАТИЗАЦІЯ", color: "#7c6ee0", icon: "fa-solid fa-robot" },
+  4: { name: "Claude Code CLI", sub: "ФАЗА 4 · AI-АГЕНТ У ТЕРМІНАЛІ", color: "#7c6ee0", icon: "fa-solid fa-robot" },
+  5: { name: "OpenAI Codex CLI", sub: "ФАЗА 5 · AI-АГЕНТ У ТЕРМІНАЛІ", color: "#d98b3d", icon: "fa-solid fa-wand-magic-sparkles" },
 };
 
-export const PHASE_IDS = [1, 2, 3];
+export const PHASE_IDS = [1, 2, 3, 4, 5];
 
-export const CMDS: Command[] = [
-  { id: "t1", cat: "term", cmd: "pwd", desc: "Показати, у якій папці ви зараз перебуваєте", example: "pwd → /Users/olena/proekty" },
-  { id: "t2", cat: "term", cmd: "ls", desc: "Показати список файлів і папок у поточній папці", example: "ls — побачити, що лежить поруч" },
-  { id: "t3", cat: "term", cmd: "dir", desc: "Список файлів у поточній папці (Windows-варіант ls)", example: "dir — те саме, що ls, але на Windows" },
-  { id: "t4", cat: "term", cmd: "cd <папка>", desc: "Перейти до іншої папки", example: "cd src — зайти всередину папки src" },
-  { id: "t5", cat: "term", cmd: "cd ..", desc: "Піднятись на рівень вище", example: "крок назад до батьківської папки" },
-  { id: "t6", cat: "term", cmd: "mkdir <назва>", desc: "Створити нову папку", example: "mkdir project — папка project зʼявиться поруч" },
-  { id: "t7", cat: "term", cmd: "clear", desc: "Очистити екран терміналу", example: "коли термінал став задовгий і незручний" },
-  { id: "t8", cat: "term", cmd: "ssh-keygen -t ed25519 -C \"email\"", desc: "Згенерувати SSH-ключ для входу на GitHub без пароля", example: "приватний ключ лишається на компʼютері, публічний — у GitHub" },
-  { id: "g0", cat: "git", cmd: "git --version", desc: "Перевірити, що Git встановлено, і показати версію", example: "у відповідь: git version 2.43.0" },
-  { id: "g1", cat: "git", cmd: "git init", desc: "Створити новий репозиторій у поточній папці", example: "запускається один раз на старті проєкту" },
-  { id: "g2", cat: "git", cmd: "git status", desc: "Побачити, які файли змінені й що готове до коміту", example: "варто робити перед кожним комітом" },
-  { id: "g3a", cat: "git", cmd: "git add <файл>", desc: "Підготувати конкретний файл до збереження", example: "git add README.md" },
-  { id: "g3", cat: "git", cmd: "git add .", desc: "Додати всі зміни до «коробки» перед збереженням", example: "крапка означає «усі файли одразу»" },
-  { id: "g4", cat: "git", cmd: "git commit -m \"опис\"", desc: "Зберегти знімок змін із коротким підписом", example: "git commit -m \"оновив бюджет\"" },
-  { id: "g5", cat: "git", cmd: "git log", desc: "Переглянути історію всіх комітів", example: "git log показує, хто і коли змінював" },
-  { id: "g6", cat: "git", cmd: "git branch <назва>", desc: "Створити нову гілку для експериментів", example: "git branch feature — основна версія недоторкана" },
-  { id: "g7", cat: "git", cmd: "git checkout <гілка>", desc: "Перейти на іншу гілку", example: "git checkout main — повернутись назад" },
-  { id: "g7b", cat: "git", cmd: "git checkout -b <гілка>", desc: "Створити гілку і одразу перейти в неї", example: "git checkout -b nova-knopka" },
-  { id: "g8", cat: "git", cmd: "git merge <гілка>", desc: "Злити зміни з гілки у поточну", example: "коли робота над гілкою завершена" },
-  { id: "g8b", cat: "git", cmd: "git remote add origin <url>", desc: "Підказати Git, де його хмарна копія на GitHub", example: "зʼєднати локальний проєкт з GitHub" },
-  { id: "g9", cat: "git", cmd: "git push", desc: "Відправити свої коміти на GitHub", example: "щоб команда побачила ваші зміни" },
-  { id: "g10", cat: "git", cmd: "git pull", desc: "Забрати свіжі зміни колег із GitHub", example: "робіть перед початком роботи щодня" },
-  { id: "g11", cat: "git", cmd: "git clone <url>", desc: "Скопіювати чужий репозиторій собі", example: "git clone https://github.com/team/plan" },
-  { id: "h1", cat: "gh", cmd: "gh repo create", desc: "Створити репозиторій на GitHub прямо з терміналу", example: "без відкриття сайту" },
-  { id: "h5", cat: "gh", cmd: "gh repo clone team/plan", desc: "Клонувати репозиторій з GitHub коротко", example: "без повного URL" },
-  { id: "h6", cat: "gh", cmd: "gh issue create", desc: "Створити нову задачу (issue) у репозиторії", example: "поставити задачу команді з терміналу" },
-  { id: "h4", cat: "gh", cmd: "gh issue list", desc: "Показати список задач (issues) проєкту", example: "усі відкриті завдання одним списком" },
-  { id: "h2", cat: "gh", cmd: "gh pr create", desc: "Відкрити Pull Request — запит на злиття змін", example: "команда перегляне і затвердить" },
-  { id: "h3", cat: "gh", cmd: "gh pr status", desc: "Перевірити стан своїх Pull Request", example: "що вже схвалено, а що чекає" },
-  { id: "h7", cat: "gh", cmd: "gh pr merge", desc: "Злити схвалений Pull Request у головну гілку", example: "після Approve від рецензента" },
-  { id: "c1", cat: "claude", cmd: "claude", desc: "Запустити Claude Code в терміналі", example: "відкриє діалог з асистентом" },
-  { id: "c2", cat: "claude", cmd: "/init", desc: "Створити файл CLAUDE.md з описом проєкту для асистента", example: "щоб Claude розумів контекст" },
-  { id: "c3", cat: "claude", cmd: "/clear", desc: "Очистити контекст поточної розмови", example: "почати нову задачу «з чистого аркуша»" },
-  { id: "c4", cat: "claude", cmd: "/review", desc: "Попросити Claude переглянути ваш код", example: "знайде помилки й підкаже покращення" },
-  { id: "c5", cat: "claude", cmd: "claude -p \"завдання\"", desc: "Дати Claude завдання одним рядком без діалогу", example: "claude -p \"виправ помилку у формі\"" },
-  { id: "x1", cat: "codex", cmd: "codex", desc: "Запустити Codex CLI — AI-агента в терміналі", example: "інтерактивний режим агента" },
-  { id: "x2", cat: "codex", cmd: "codex \"опис задачі\"", desc: "Доручити агенту задачу звичайною мовою", example: "codex \"додай сторінку контактів\"" },
-  { id: "x3", cat: "codex", cmd: "/approvals", desc: "Налаштувати, що агент може робити без підтвердження", example: "рівень довіри до агента" },
-  { id: "x4", cat: "codex", cmd: "/model", desc: "Обрати модель, якою працює агент", example: "перемкнути на потужнішу модель" },
-];
+// Команди Тренажера походять з уніфікованого каталогу (src/content/catalog.json),
+// тож одне джерело живить Тренажер, CLI-вкладку і валідацію квізів.
+export const CMDS: Command[] = CATALOG.map(({ id, cat, cmd, desc, example }) => ({ id, cat, cmd, desc, example }));
 
 export const CAT_META: Record<Command["cat"], { name: string; color: string; icon: string }> = {
   term: { name: "Термінал", color: "#6b7d78", icon: "fa-solid fa-terminal" },
@@ -1093,15 +1074,21 @@ export const CAT_ORDER: [Command["cat"], string][] = [
 
 export type BadgeDef = { icon: string; name: string; desc: string; need: number };
 
+// Скільки уроків завершено на кінець фази (кумулятивно) — щоб пороги бейджів
+// не були «магічними числами» й автоматично слідували за контентом.
+const throughPhase = (phase: number) => LESSONS.filter((l) => l.phase <= phase).length;
+
 export const BADGE_DEFS: BadgeDef[] = [
   { icon: "fa-solid fa-flag-checkered", name: "Старт", desc: "Почав навчання", need: 0 },
   { icon: "fa-solid fa-box-archive", name: "Перший коміт", desc: "Пройшов урок 3", need: 3 },
-  { icon: "fa-solid fa-timeline", name: "Знавець історії", desc: "Завершив фазу 1", need: 4 },
+  { icon: "fa-solid fa-timeline", name: "Знавець історії", desc: "Завершив фазу 1", need: throughPhase(1) },
   { icon: "fa-brands fa-github", name: "На GitHub", desc: "Пройшов урок 5", need: 5 },
   { icon: "fa-solid fa-code-branch", name: "Гілкар", desc: "Освоїв гілки", need: 7 },
-  { icon: "fa-solid fa-code-pull-request", name: "Рев’ювер", desc: "Завершив фазу 2", need: 8 },
-  { icon: "fa-solid fa-robot", name: "AI-пілот", desc: "Почав фазу 3", need: 9 },
-  { icon: "fa-solid fa-crown", name: "Магістр Git", desc: "Пройшов усі уроки", need: 11 },
+  { icon: "fa-solid fa-code-pull-request", name: "Рев’ювер", desc: "Завершив фазу 2", need: throughPhase(2) },
+  { icon: "fa-solid fa-robot", name: "AI-пілот", desc: "Почав фазу 3", need: throughPhase(2) + 1 },
+  { icon: "fa-solid fa-crown", name: "Магістр Git", desc: "Завершив усі Git-фази", need: throughPhase(3) },
+  { icon: "fa-solid fa-robot", name: "Claude-пілот", desc: "Завершив курс Claude Code CLI", need: throughPhase(4) },
+  { icon: "fa-solid fa-wand-magic-sparkles", name: "Codex-майстер", desc: "Завершив курс Codex CLI", need: throughPhase(5) },
 ];
 
 export const LEADERBOARD_SEED: [number, number][] = [
