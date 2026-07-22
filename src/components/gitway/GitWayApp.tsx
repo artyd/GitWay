@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 import { sx } from "@/lib/sx";
 import { Clay, Icon } from "./ui";
 import { AudioPlayer } from "./AudioPlayer";
+import { SandboxPanel } from "./sandbox/SandboxPanel";
+import { GitEngine } from "@/lib/git-engine/store";
+import { loadWorkspace } from "@/lib/git-engine/persistence";
+import { createSeedWorkspace } from "@/lib/git-engine/seed";
 import {
   BADGE_DEFS,
   CAT_META,
@@ -16,7 +20,7 @@ import {
   type Command,
 } from "@/lib/gitway-data";
 
-type Screen = "login" | "roadmap" | "trainer" | "lesson" | "quiz" | "progress";
+type Screen = "login" | "roadmap" | "trainer" | "sandbox" | "lesson" | "quiz" | "progress";
 type TrMode = "cards" | "spell" | "ref";
 
 // 5 акаунтів-відділів. Прогрес кожного зберігається окремо (localStorage).
@@ -49,18 +53,6 @@ const saveProgress = (key: string, data: SavedProgress) => {
     /* ignore */
   }
 };
-type Tab = "terminal" | "github" | "branch";
-type TermLine = { kind: "out" | "cmd" | "err"; text: string };
-type BNode = { b: "main" | "feature"; i: number; merge?: boolean };
-
-// Кроки інтерактивного терміналу пісочниці (як у прикладі).
-const TERM_STEPS = [
-  { hint: "ініціалізуйте репозиторій командою git init", cmd: "git init", out: "Initialized empty Git repository in /project/.git/" },
-  { hint: "додайте всі файли до індексу командою git add .", cmd: "git add .", out: "файли додано до staging (готові до збереження)" },
-  { hint: 'збережіть зміни: git commit -m "перший коміт"', cmd: "git commit", out: "[main (root-commit) a1b2c3d] перший коміт\n 3 files changed, 128 insertions(+)" },
-];
-const WELCOME_LINE: TermLine = { kind: "out", text: "Ласкаво просимо до пісочниці! Виконуйте команди за підказкою зверху." };
-
 type State = {
   screen: Screen;
   user: Account | null;
@@ -69,19 +61,6 @@ type State = {
   activeId: number;
   xp: number;
   streak: number;
-  // sandbox
-  tab: Tab;
-  termHistory: TermLine[];
-  termInput: string;
-  termStep: number;
-  ghLog: { msg: string; time: string }[];
-  ghCount: number;
-  bnodes: BNode[];
-  bhead: "main" | "feature";
-  bfeature: boolean;
-  bmerged: boolean;
-  bfeatBase: number;
-  blog: string[];
   // quiz
   quizIndex: number;
   selected: number | null;
@@ -100,21 +79,6 @@ type State = {
   spellOk: boolean;
 };
 
-const freshSandbox = () => ({
-  tab: "terminal" as Tab,
-  termHistory: [WELCOME_LINE],
-  termInput: "",
-  termStep: 0,
-  ghLog: [] as { msg: string; time: string }[],
-  ghCount: 0,
-  bnodes: [{ b: "main", i: 0 }] as BNode[],
-  bhead: "main" as "main" | "feature",
-  bfeature: false,
-  bmerged: false,
-  bfeatBase: 0,
-  blog: ["init → гілка main"],
-});
-
 const initialState: State = {
   screen: "login",
   user: null,
@@ -123,7 +87,6 @@ const initialState: State = {
   activeId: 1,
   xp: 0,
   streak: 0,
-  ...freshSandbox(),
   quizIndex: 0,
   selected: null,
   answered: false,
@@ -148,6 +111,9 @@ const scrollTop = () => {
 export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?: boolean }) {
   const [s, setS] = useState<State>(initialState);
   const set = (patch: Partial<State>) => setS((prev) => ({ ...prev, ...patch }));
+
+  // Git-рушій пісочниці. Один екземпляр на акаунт, спільний для терміналу й GitHub-UI.
+  const [engine, setEngine] = useState<GitEngine | null>(null);
 
   // Автозбереження прогресу поточного акаунта в localStorage.
   useEffect(() => {
@@ -187,16 +153,23 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
       spellInput: "",
       spellChecked: false,
       spellOk: false,
-      ...freshSandbox(),
     });
+    // Створюємо/завантажуємо рушій пісочниці для цього акаунта.
+    const ws = loadWorkspace(acc.key) ?? createSeedWorkspace(acc.key, Date.now);
+    setEngine(new GitEngine(ws, Date.now));
     scrollTop();
   };
   const logout = () => {
     set({ screen: "login", user: null });
+    setEngine(null);
     scrollTop();
   };
   const openLesson = (id: number) => {
-    set({ activeId: id, screen: "lesson", ...freshSandbox() });
+    set({ activeId: id, screen: "lesson" });
+    scrollTop();
+  };
+  const goSandbox = () => {
+    set({ screen: "sandbox" });
     scrollTop();
   };
   const startQuiz = () => {
@@ -235,60 +208,6 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
     set({ spellChecked: true, spellOk: ok, trKnown: kn });
   };
   const spellNext = () => set({ trIndex: s.trIndex + 1, spellInput: "", spellChecked: false, spellOk: false });
-
-  // ---------- sandbox: terminal ----------
-  const onTermKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== "Enter") return;
-    const raw = (s.termInput || "").trim();
-    if (!raw) return;
-    const step = TERM_STEPS[s.termStep];
-    const hist = s.termHistory.slice();
-    hist.push({ kind: "cmd", text: "$ " + raw });
-    if (!step) {
-      set({ termHistory: hist, termInput: "" });
-      return;
-    }
-    const n = raw.replace(/\s+/g, " ").toLowerCase();
-    const target = step.cmd.toLowerCase();
-    const ok = n === target || (target === "git commit" && n.indexOf("git commit") === 0);
-    if (ok) {
-      hist.push({ kind: "out", text: step.out });
-      set({ termHistory: hist, termInput: "", termStep: s.termStep + 1 });
-    } else {
-      hist.push({ kind: "err", text: "команду не розпізнано. Підказка: " + step.cmd });
-      set({ termHistory: hist, termInput: "" });
-    }
-  };
-
-  // ---------- sandbox: github ----------
-  const ghCommit = () => {
-    const n = s.ghCount + 1;
-    set({ ghCount: n, ghLog: [{ msg: "оновлено презентацію #" + n, time: "щойно" }].concat(s.ghLog) });
-  };
-
-  // ---------- sandbox: branches ----------
-  const nextI = () => Math.max.apply(null, s.bnodes.map((n) => n.i)) + 1;
-  const bCommit = () => {
-    const i = nextI();
-    set({ bnodes: s.bnodes.concat([{ b: s.bhead, i }]), blog: s.blog.concat(["$ git commit (" + s.bhead + ")"]) });
-  };
-  const bCreate = () => {
-    if (s.bfeature) return;
-    const base = Math.max.apply(null, s.bnodes.filter((n) => n.b === "main").map((n) => n.i));
-    set({ bfeature: true, bfeatBase: base, bhead: "feature", blog: s.blog.concat(["$ git checkout -b feature"]) });
-  };
-  const bToggleHead = () => {
-    if (!s.bfeature) return;
-    const h = s.bhead === "main" ? "feature" : "main";
-    set({ bhead: h, blog: s.blog.concat(["$ git checkout " + h]) });
-  };
-  const bMerge = () => {
-    if (!s.bfeature || s.bmerged) return;
-    const i = nextI();
-    set({ bnodes: s.bnodes.concat([{ b: "main", i, merge: true }]), bmerged: true, bhead: "main", blog: s.blog.concat(["$ git merge feature"]) });
-  };
-  const bReset = () =>
-    set({ bnodes: [{ b: "main", i: 0 }], bhead: "main", bfeature: false, bmerged: false, bfeatBase: 0, blog: ["init → гілка main"] });
 
   // ---------- quiz ----------
   const activeLesson = LESSONS.find((l) => l.id === s.activeId) || LESSONS[0];
@@ -342,6 +261,9 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
           </button>
           <button onClick={goTrainer} style={sx(s.screen === "trainer" ? navOn : navOff)}>
             <Icon name="fa-solid fa-dumbbell" /> Тренажер
+          </button>
+          <button onClick={goSandbox} style={sx(s.screen === "sandbox" ? navOn : navOff)}>
+            <Icon name="fa-solid fa-terminal" /> Пісочниця
           </button>
           <button onClick={() => go("progress")} style={sx(s.screen === "progress" ? navOn : navOff)}>
             <Icon name="fa-solid fa-chart-simple" /> Мій прогрес
@@ -698,80 +620,22 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
     );
   };
 
-  // ---------- branch graph (SVG) ----------
-  const BranchGraph = () => {
-    const gap = 64,
-      x0 = 34,
-      yMain = 96,
-      yFeat = 34,
-      r = 15;
-    const X = (i: number) => x0 + i * gap;
-    const maxI = Math.max.apply(null, s.bnodes.map((n) => n.i));
-    const W = Math.max(360, X(maxI) + 50),
-      H = 132;
-    const main = s.bnodes.filter((n) => n.b === "main").sort((a, b) => a.i - b.i);
-    const feat = s.bnodes.filter((n) => n.b === "feature").sort((a, b) => a.i - b.i);
-    const lines: React.ReactNode[] = [];
-    const line = (x1: number, y1: number, x2: number, y2: number, col: string, key: string) => (
-      <line key={key} x1={x1} y1={y1} x2={x2} y2={y2} stroke={col} strokeWidth={5} strokeLinecap="round" />
-    );
-    for (let k = 1; k < main.length; k++) lines.push(line(X(main[k - 1].i), yMain, X(main[k].i), yMain, "#14b8a6", "m" + k));
-    for (let k = 1; k < feat.length; k++) lines.push(line(X(feat[k - 1].i), yFeat, X(feat[k].i), yFeat, "#7c6ee0", "f" + k));
-    if (s.bfeature && feat.length) lines.push(line(X(s.bfeatBase), yMain, X(feat[0].i), yFeat, "#7c6ee0", "br"));
-    if (s.bmerged) {
-      const last = feat[feat.length - 1];
-      const mnode = s.bnodes.find((n) => n.merge);
-      if (last && mnode) lines.push(line(X(last.i), yFeat, X(mnode.i), yMain, "#7c6ee0", "mg"));
+  // ---------- sandbox (реальний термінал + клон GitHub) ----------
+  const Sandbox = () => {
+    if (!s.user || !engine) {
+      return (
+        <main style={sx("flex:1;display:grid;place-items:center;padding:60px 24px")}>
+          <span style={sx("color:#8b9c97;font-weight:700")}>Завантаження пісочниці…</span>
+        </main>
+      );
     }
-    return (
-      <svg width={W} height={H} style={{ display: "block" }}>
-        {lines}
-        {s.bnodes.map((n, idx) => {
-          const y = n.b === "main" ? yMain : yFeat;
-          const col = n.merge ? "#5cb85c" : n.b === "main" ? "#14b8a6" : "#7c6ee0";
-          return <circle key={"c" + idx} cx={X(n.i)} cy={y} r={r} fill={col} stroke="#fff" strokeWidth={3} style={{ filter: "drop-shadow(0 4px 6px rgba(17,74,68,.25))" }} />;
-        })}
-        <text x={6} y={yMain - 24} fill="#14b8a6" fontSize={12} fontWeight={800}>main</text>
-        {s.bfeature && (
-          <text x={6} y={yFeat - 22} fill="#7c6ee0" fontSize={12} fontWeight={800}>feature</text>
-        )}
-      </svg>
-    );
+    return <SandboxPanel engine={engine} account={s.user.name} />;
   };
 
   // ---------- lesson ----------
   const Lesson = () => {
     const al = activeLesson;
     const am = PHASE_META[al.phase];
-
-    const tabBase = "display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border:none;cursor:pointer;border-radius:14px 14px 0 0;font-weight:800;font-size:14px;transition:all .15s;";
-    const tabOn = tabBase + "color:#0d7d70;background:#eafaf7;box-shadow:inset 0 3px 7px rgba(17,74,68,.05);";
-    const tabOff = tabBase + "color:#9aaba6;background:transparent;";
-
-    const termActive = s.termStep < TERM_STEPS.length;
-    const termHint = termActive ? TERM_STEPS[s.termStep].hint : "усі кроки виконано";
-
-    const baseFiles = [
-      { icon: "fa-solid fa-file-lines", name: "README.md", msg: "початковий опис", time: "2 дні тому" },
-      { icon: "fa-solid fa-file-excel", name: "budget-2026.xlsx", msg: "оновлено цифри Q1", time: "вчора" },
-      { icon: "fa-solid fa-file-powerpoint", name: "presentation.pptx", msg: "додано слайд стратегії", time: "3 год тому" },
-    ];
-    const ghFiles = s.ghLog
-      .map((g) => ({ icon: "fa-solid fa-file-powerpoint", name: "presentation.pptx", msg: g.msg, time: g.time }))
-      .concat(baseFiles);
-    const ghStatus = s.ghCount === 0 ? "Внесіть зміну — вона з’явиться в історії зверху." : "Збережено комітів: " + s.ghCount + " ✓";
-
-    const brBtn = "display:inline-flex;align-items:center;gap:8px;padding:11px 17px;border:none;cursor:pointer;border-radius:14px;font-weight:700;font-size:13.5px;color:#14332f;background:#fff;box-shadow:inset 0 -3px 6px rgba(17,74,68,.05),inset 0 3px 5px rgba(255,255,255,.9),0 6px 13px -7px rgba(17,74,68,.25);";
-    const brBtnAccent = "display:inline-flex;align-items:center;gap:8px;padding:11px 17px;border:none;cursor:pointer;border-radius:14px;font-weight:800;font-size:13.5px;color:#fff;background:#7c6ee0;box-shadow:0 9px 17px -7px rgba(124,110,224,.6),inset 0 -4px 8px rgba(70,60,150,.4),inset 0 4px 7px rgba(255,255,255,.3);";
-    const brBtnGhost = "display:grid;place-items:center;width:44px;height:44px;border:none;cursor:pointer;border-radius:14px;color:#8b9c97;background:#fff;box-shadow:inset 0 -3px 6px rgba(17,74,68,.05),inset 0 3px 5px rgba(255,255,255,.9),0 6px 13px -7px rgba(17,74,68,.25);";
-
-    const lineStyle = (kind: TermLine["kind"]) => {
-      let st = "white-space:pre-wrap;";
-      if (kind === "cmd") st += "color:#7ee6d3;font-weight:700;";
-      else if (kind === "err") st += "color:#ff9b8a;";
-      else st += "color:#9fd8cd;";
-      return st;
-    };
 
     return (
       <main style={sx("flex:1;max-width:900px;margin:0 auto;width:100%;padding:26px 24px 90px;animation:floatUp .4s ease")}>
@@ -824,126 +688,18 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
           ))}
         </div>
 
-        {/* interactive sandbox — dev-інструмент, як у прикладі */}
-        <div style={sx("border-radius:26px;background:#fff;overflow:hidden;box-shadow:0 20px 44px -20px rgba(17,74,68,.35),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 11px rgba(255,255,255,.9)")}>
-          <div style={sx("display:flex;align-items:center;gap:10px;padding:16px 22px 0")}>
-            <Icon name="fa-solid fa-wand-magic-sparkles" style={sx("color:#14b8a6")} />
-            <h3 className="disp" style={sx("font-size:19px;font-weight:800")}>Пісочниця — спробуйте самі</h3>
+        {/* заклик до практики у вкладці «Пісочниця» */}
+        <div style={sx("display:flex;align-items:center;gap:16px;padding:20px 24px;border-radius:24px;background:linear-gradient(120deg,#0f2a27,#14413a);color:#eafaf7;box-shadow:0 20px 44px -20px rgba(17,74,68,.5)")}>
+          <span style={sx("flex:none;display:grid;place-items:center;width:52px;height:52px;border-radius:16px;background:rgba(45,212,191,.18);color:#7ee6d3;font-size:22px")}>
+            <Icon name="fa-solid fa-terminal" />
+          </span>
+          <div style={sx("flex:1;min-width:0")}>
+            <div style={sx("font-weight:800;font-size:17px;margin-bottom:3px")}>Спробуйте на практиці у Пісочниці</div>
+            <div style={sx("color:#9fd8cd;font-size:14px;line-height:1.5")}>Справжній термінал і клон GitHub — виконуйте команди цього уроку без ризику.</div>
           </div>
-          <div style={sx("display:flex;gap:6px;padding:14px 22px 0")}>
-            <button onClick={() => set({ tab: "terminal" })} style={sx(s.tab === "terminal" ? tabOn : tabOff)}>
-              <Icon name="fa-solid fa-terminal" /> Термінал
-            </button>
-            <button onClick={() => set({ tab: "github" })} style={sx(s.tab === "github" ? tabOn : tabOff)}>
-              <Icon name="fa-brands fa-github" /> GitHub
-            </button>
-            <button onClick={() => set({ tab: "branch" })} style={sx(s.tab === "branch" ? tabOn : tabOff)}>
-              <Icon name="fa-solid fa-code-branch" /> Гілки
-            </button>
-          </div>
-          <div style={sx("padding:18px 22px 24px")}>
-            {/* terminal */}
-            {s.tab === "terminal" && (
-              <>
-                <div style={sx("display:flex;align-items:center;gap:10px;padding:11px 15px;border-radius:14px;margin-bottom:14px;background:#eafaf7;color:#0d7d70;font-weight:700;font-size:14px")}>
-                  <Icon name="fa-solid fa-circle-info" /> Завдання: {termHint}
-                </div>
-                <div
-                  onClick={(e) => {
-                    const i = (e.currentTarget as HTMLElement).querySelector("input");
-                    if (i) (i as HTMLInputElement).focus();
-                  }}
-                  style={sx("font-family:'SF Mono',ui-monospace,Menlo,monospace;background:#0f2a27;border-radius:18px;padding:18px 20px;min-height:210px;font-size:14px;line-height:1.75;color:#c7f0e8;cursor:text;box-shadow:inset 0 3px 14px rgba(0,0,0,.35)")}
-                >
-                  <div style={sx("display:flex;gap:8px;margin-bottom:12px")}>
-                    <span style={sx("width:12px;height:12px;border-radius:50%;background:#ff5f57")} />
-                    <span style={sx("width:12px;height:12px;border-radius:50%;background:#febc2e")} />
-                    <span style={sx("width:12px;height:12px;border-radius:50%;background:#28c840")} />
-                  </div>
-                  {s.termHistory.map((ln, i) => (
-                    <div key={i} style={sx(lineStyle(ln.kind))}>{ln.text}</div>
-                  ))}
-                  {termActive && (
-                    <div style={sx("display:flex;align-items:center;gap:8px;margin-top:4px")}>
-                      <span style={sx("color:#2dd4bf;font-weight:700")}>$</span>
-                      <input
-                        value={s.termInput}
-                        onChange={(e) => set({ termInput: e.target.value })}
-                        onKeyDown={onTermKey}
-                        placeholder="введіть команду та натисніть Enter"
-                        style={sx("flex:1;background:none;border:none;color:#eafaf7;font-family:inherit;font-size:14px;outline:none")}
-                      />
-                    </div>
-                  )}
-                  {!termActive && (
-                    <div style={sx("margin-top:10px;color:#2dd4bf;font-weight:700")}>
-                      <Icon name="fa-solid fa-circle-check" /> Завдання виконано! Ви зробили це самі 🎉
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-
-            {/* github */}
-            {s.tab === "github" && (
-              <>
-                <div style={sx("border-radius:18px;overflow:hidden;border:1px solid #e4ebe8")}>
-                  <div style={sx("display:flex;align-items:center;gap:10px;padding:14px 18px;background:#f5f8f7;border-bottom:1px solid #e4ebe8")}>
-                    <Icon name="fa-solid fa-book" style={sx("color:#8b9c97")} />
-                    <span style={sx("font-weight:800;color:#0f9c8c")}>{userFirst}-team</span>
-                    <span style={sx("color:#c3d0cc")}>/</span>
-                    <span style={sx("font-weight:800")}>marketing-plan</span>
-                    <span style={sx("margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#8b9c97")}>
-                      <Icon name="fa-solid fa-code-branch" /> main
-                    </span>
-                  </div>
-                  {ghFiles.map((f, i) => (
-                    <div key={i} style={sx("display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid #eef3f1")}>
-                      <Icon name={f.icon} style={sx("color:#8b9c97;width:16px")} />
-                      <span style={sx("font-weight:700;font-size:14.5px")}>{f.name}</span>
-                      <span style={sx("margin-left:auto;font-size:13px;color:#8b9c97")}>{f.msg}</span>
-                      <span style={sx("font-size:12.5px;color:#c3d0cc;min-width:70px;text-align:right")}>{f.time}</span>
-                    </div>
-                  ))}
-                </div>
-                <div style={sx("display:flex;align-items:center;gap:14px;margin-top:16px;flex-wrap:wrap")}>
-                  <Clay onClick={ghCommit} base="display:inline-flex;align-items:center;gap:9px;padding:12px 22px;border:none;cursor:pointer;border-radius:16px;font-weight:800;font-size:14.5px;color:#fff;background:#22a06b;box-shadow:0 10px 20px -8px rgba(34,160,107,.6),inset 0 -4px 8px rgba(12,90,55,.4),inset 0 4px 7px rgba(255,255,255,.3);transition:transform .15s" hover="transform:translateY(-2px)">
-                    <Icon name="fa-solid fa-code-commit" /> Зробити коміт
-                  </Clay>
-                  <span style={sx("color:#8b9c97;font-size:14px;font-weight:600")}>{ghStatus}</span>
-                </div>
-              </>
-            )}
-
-            {/* branches */}
-            {s.tab === "branch" && (
-              <>
-                <p style={sx("margin:0 0 14px;color:#5b6d68;font-size:14.5px;line-height:1.55")}>
-                  Гілка — це паралельний всесвіт вашого проєкту. Натискайте кнопки і дивіться, як росте дерево комітів.
-                </p>
-                <div style={sx("border-radius:18px;background:#f2f7f5;padding:20px;overflow-x:auto;box-shadow:inset 0 2px 8px rgba(17,74,68,.08)")}>
-                  {BranchGraph()}
-                </div>
-                <div style={sx("display:flex;gap:10px;flex-wrap:wrap;margin-top:16px")}>
-                  <button onClick={bCommit} style={sx(brBtn)}>
-                    <Icon name="fa-solid fa-code-commit" /> Коміт у «{s.bhead}»
-                  </button>
-                  <button onClick={bCreate} style={sx(brBtn)}>
-                    <Icon name="fa-solid fa-code-branch" /> Створити гілку feature
-                  </button>
-                  <button onClick={bToggleHead} style={sx(brBtn)}>
-                    <Icon name="fa-solid fa-shuffle" /> Перемкнути гілку
-                  </button>
-                  <button onClick={bMerge} style={sx(brBtnAccent)}>
-                    <Icon name="fa-solid fa-code-merge" /> Злити feature → main
-                  </button>
-                  <button onClick={bReset} style={sx(brBtnGhost)}>
-                    <Icon name="fa-solid fa-rotate-left" />
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          <Clay onClick={goSandbox} base="flex:none;display:inline-flex;align-items:center;gap:9px;padding:12px 20px;border:none;cursor:pointer;border-radius:15px;font-weight:800;font-size:14.5px;color:#0f2a27;background:#2dd4bf;box-shadow:0 12px 22px -10px rgba(45,212,191,.7);transition:transform .15s" hover="transform:translateY(-2px)">
+            Відкрити <Icon name="fa-solid fa-arrow-right" />
+          </Clay>
         </div>
 
         <Clay onClick={startQuiz} base="display:flex;align-items:center;justify-content:center;gap:11px;width:100%;margin-top:26px;padding:18px;border:none;cursor:pointer;border-radius:20px;font-weight:800;font-size:17px;color:#fff;background:#14b8a6;box-shadow:0 16px 30px -12px rgba(20,184,166,.65),inset 0 -5px 11px rgba(6,95,85,.4),inset 0 5px 9px rgba(255,255,255,.32);transition:transform .16s" hover="transform:translateY(-3px)">
@@ -1194,6 +950,7 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
       {s.screen === "login" && Login()}
       {s.screen === "roadmap" && Roadmap()}
       {s.screen === "trainer" && Trainer()}
+      {s.screen === "sandbox" && Sandbox()}
       {s.screen === "lesson" && Lesson()}
       {s.screen === "quiz" && Quiz()}
       {s.screen === "progress" && Progress()}
