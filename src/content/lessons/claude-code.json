@@ -768,7 +768,8 @@
           "explanation": "Шість примітивів: CLAUDE.md, слеш-команди, субагенти, хуки, плагіни і MCP.",
           "hint": "6"
         }
-      ]
+      ],
+      "video": "/videos/claude-09.mp4"
     },
     {
       "icon": "fa-solid fa-puzzle-piece",
