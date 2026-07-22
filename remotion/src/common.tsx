@@ -42,6 +42,46 @@ export const useEnter = (delay = 0, damping = 200) => {
 
 export const floatY = (frame: number, amp = 5, speed = 26, phase = 0) => Math.sin(frame / speed + phase) * amp;
 
+// Анімований набір тексту: скільки символів показати на даному кадрі.
+export const typed = (text: string, localFrame: number, start: number, cps = 42): string => {
+  const n = Math.max(0, Math.floor(((localFrame - start) / FPS) * cps));
+  return text.slice(0, Math.min(text.length, n));
+};
+export const typedDone = (text: string, localFrame: number, start: number, cps = 42): boolean =>
+  ((localFrame - start) / FPS) * cps >= text.length;
+
+// Блимаючий курсор терміналу.
+export const Cursor: React.FC<{ frame: number; color?: string; h?: number }> = ({ frame, color = "#7ee6d3", h = 34 }) => (
+  <span style={{ display: "inline-block", width: 14, height: h, background: color, marginLeft: 4, transform: "translateY(4px)", opacity: Math.floor(frame / 15) % 2 === 0 ? 1 : 0.15, borderRadius: 2 }} />
+);
+
+// Плавний перехід сцени: поява/зникнення за локальним кадром сцени.
+export const sceneFade = (localFrame: number, dur: number, inLen = 14, outLen = 12): { opacity: number; y: number } => {
+  const opIn = Math.min(1, localFrame / inLen);
+  const opOut = Math.min(1, Math.max(0, (dur - localFrame) / outLen));
+  const opacity = Math.min(opIn, opOut);
+  const y = (1 - opIn) * 26;
+  return { opacity, y };
+};
+
+// ── додаткові SVG-іконки ──
+type IconP = { size?: number; color?: string };
+const svg = (size: number, children: React.ReactNode, sw = 8, color = "#fff") => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">{children}</svg>
+);
+export const TerminalIcon: React.FC<IconP> = ({ size = 42, color = "#fff" }) => svg(size, <><rect x="14" y="20" width="72" height="60" rx="10" /><path d="M28 42 L40 52 L28 62" /><path d="M50 64 h18" /></>, 7, color);
+export const RobotIcon: React.FC<IconP> = ({ size = 42, color = "#fff" }) => svg(size, <><rect x="24" y="34" width="52" height="42" rx="12" /><path d="M50 20 v14 M38 52 h.01 M62 52 h.01" /><path d="M20 50 h4 M76 50 h4" /></>, 7, color);
+export const FolderIcon: React.FC<IconP> = ({ size = 42, color = "#fff" }) => svg(size, <path d="M18 30 h22 l8 10 h34 v34 a4 4 0 0 1 -4 4 H22 a4 4 0 0 1 -4 -4 Z" />, 7, color);
+export const ShieldIcon: React.FC<IconP> = ({ size = 42, color = "#fff" }) => svg(size, <><path d="M50 16 l30 10 v22 c0 20 -14 30 -30 36 c-16 -6 -30 -16 -30 -36 V26 Z" /><path d="M38 50 l8 8 l16 -18" /></>, 7, color);
+export const GearIcon: React.FC<IconP> = ({ size = 42, color = "#fff" }) => svg(size, <><circle cx="50" cy="50" r="14" /><path d="M50 20 v-8 M50 88 v-8 M80 50 h8 M12 50 h8 M71 29 l6 -6 M23 77 l6 -6 M71 71 l6 6 M23 23 l6 6" /></>, 7, color);
+export const PlugIcon: React.FC<IconP> = ({ size = 42, color = "#fff" }) => svg(size, <><path d="M40 20 v16 M60 20 v16" /><rect x="30" y="36" width="40" height="22" rx="8" /><path d="M50 58 v14 a10 10 0 0 1 -10 10 h-4" /></>, 7, color);
+export const CloudIcon: React.FC<IconP> = ({ size = 42, color = "#fff" }) => svg(size, <path d="M34 68 h34 a16 16 0 0 0 2 -32 a22 22 0 0 0 -42 6 a14 14 0 0 0 6 26 Z" />, 7, color);
+export const DocIcon: React.FC<IconP> = ({ size = 42, color = "#fff" }) => svg(size, <><path d="M32 16 h24 l16 16 v48 a4 4 0 0 1 -4 4 H32 a4 4 0 0 1 -4 -4 V20 a4 4 0 0 1 4 -4 Z" /><path d="M40 46 h20 M40 58 h20 M40 70 h12" /></>, 6, color);
+export const SparkIcon: React.FC<IconP> = ({ size = 42, color = "#fff" }) => svg(size, <path d="M50 16 l8 24 l24 8 l-24 8 l-8 24 l-8 -24 l-24 -8 l24 -8 z" fill={color} stroke="none" />, 0, color);
+export const PeopleIcon: React.FC<IconP> = ({ size = 42, color = "#fff" }) => svg(size, <><circle cx="38" cy="38" r="12" /><circle cx="66" cy="42" r="9" /><path d="M18 76 c0 -14 40 -14 40 0 M60 74 c0 -10 24 -12 24 0" /></>, 7, color);
+export const KeyboardIcon: React.FC<IconP> = ({ size = 42, color = "#fff" }) => svg(size, <><rect x="14" y="30" width="72" height="40" rx="8" /><path d="M28 44 h.01 M40 44 h.01 M52 44 h.01 M64 44 h.01 M72 44 h.01 M36 58 h28" /></>, 6, color);
+export const DownloadIcon: React.FC<IconP> = ({ size = 42, color = "#fff" }) => svg(size, <><path d="M50 18 v40 M34 46 l16 16 l16 -16" /><path d="M22 74 h56" /></>, 7, color);
+
 // ── SVG-іконки (без емодзі) ──
 export const BranchIcon: React.FC<{ size?: number; color?: string }> = ({ size = 60, color = "#fff" }) => (
   <svg width={size} height={size} viewBox="0 0 100 100" fill="none">

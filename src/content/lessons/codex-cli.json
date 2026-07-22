@@ -230,7 +230,8 @@
             }
           ]
         }
-      ]
+      ],
+      "video": "/videos/codex-02.mp4"
     },
     {
       "icon": "fa-solid fa-folder-open",
@@ -344,7 +345,8 @@
             }
           ]
         }
-      ]
+      ],
+      "video": "/videos/codex-03.mp4"
     },
     {
       "icon": "fa-solid fa-file-lines",
@@ -457,7 +459,8 @@
             }
           ]
         }
-      ]
+      ],
+      "video": "/videos/codex-04.mp4"
     },
     {
       "icon": "fa-solid fa-terminal",
@@ -572,7 +575,8 @@
             }
           ]
         }
-      ]
+      ],
+      "video": "/videos/codex-05.mp4"
     },
     {
       "icon": "fa-solid fa-shield-halved",
@@ -687,7 +691,8 @@
             }
           ]
         }
-      ]
+      ],
+      "video": "/videos/codex-06.mp4"
     },
     {
       "icon": "fa-solid fa-code-branch",
@@ -801,7 +806,8 @@
             }
           ]
         }
-      ]
+      ],
+      "video": "/videos/codex-07.mp4"
     },
     {
       "icon": "fa-solid fa-people-group",
@@ -914,7 +920,8 @@
             }
           ]
         }
-      ]
+      ],
+      "video": "/videos/codex-08.mp4"
     },
     {
       "icon": "fa-solid fa-plug",
@@ -1028,7 +1035,8 @@
             }
           ]
         }
-      ]
+      ],
+      "video": "/videos/codex-09.mp4"
     },
     {
       "icon": "fa-solid fa-cloud",
@@ -1142,7 +1150,8 @@
             }
           ]
         }
-      ]
+      ],
+      "video": "/videos/codex-10.mp4"
     },
     {
       "icon": "fa-solid fa-gears",
@@ -1256,7 +1265,8 @@
             }
           ]
         }
-      ]
+      ],
+      "video": "/videos/codex-11.mp4"
     },
     {
       "icon": "fa-solid fa-flag-checkered",
@@ -1376,7 +1386,8 @@
             }
           ]
         }
-      ]
+      ],
+      "video": "/videos/codex-12.mp4"
     }
   ]
 }

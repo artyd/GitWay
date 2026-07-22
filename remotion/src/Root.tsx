@@ -2,6 +2,8 @@ import { Composition } from "remotion";
 import { Lesson1, LESSON1_DURATION, FPS } from "./Lesson1";
 import { LessonVideo, lessonBaseDuration } from "./LessonVideo";
 import { CliLessonVideo, cliBaseDuration } from "./CliLessonVideo";
+import { RichLessonVideo, richBaseDuration } from "./RichLessonVideo";
+import { allN } from "./normalize";
 import lessonsData from "./lessons.json";
 import cliLessonsData from "./cli-lessons.json";
 import audioDurations from "./audio-durations.json";
@@ -12,6 +14,17 @@ const cliLessons = cliLessonsData as { id: number; audio: string }[];
 const durations = audioDurations as Record<string, number>;
 const cliDur = cliDurations as Record<string, number>;
 const pad = (n: number) => String(n).padStart(2, "0");
+
+// Багаті відео для уроків 2–35 (перше не чіпаємо).
+const cliAudioById: Record<number, string> = Object.fromEntries(cliLessons.map((l) => [l.id, l.audio]));
+const richLessons = allN
+  .filter((l) => l.id >= 2)
+  .map((l) => {
+    const isGit = l.id <= 11;
+    const sec = isGit ? durations[String(l.id)] : cliDur[String(l.id)];
+    const audioSrc = sec ? (isGit ? `audio/lesson-${pad(l.id)}.mp3` : cliAudioById[l.id]) : undefined;
+    return { id: l.id, sec, audioSrc };
+  });
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -57,6 +70,24 @@ export const RemotionRoot: React.FC = () => {
             width={1920}
             height={1080}
             defaultProps={{ lessonId: l.id, audioSrc: sec ? l.audio : undefined, audioFrames }}
+          />
+        );
+      })}
+
+      {/* Багаті відео (анімований термінал, переходи, іконки) — уроки 2–35 */}
+      {richLessons.map((l) => {
+        const audioFrames = l.sec ? Math.round(l.sec * FPS) : undefined;
+        const durationInFrames = audioFrames ?? richBaseDuration(l.id);
+        return (
+          <Composition
+            key={l.id}
+            id={`RichLesson${l.id}`}
+            component={RichLessonVideo}
+            durationInFrames={durationInFrames}
+            fps={FPS}
+            width={1920}
+            height={1080}
+            defaultProps={{ lessonId: l.id, audioSrc: l.audioSrc, audioFrames }}
           />
         );
       })}
