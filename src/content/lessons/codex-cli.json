@@ -1035,7 +1035,8 @@
             }
           ]
         }
-      ]
+      ],
+      "video": "/videos/codex-09.mp4"
     },
     {
       "icon": "fa-solid fa-cloud",
@@ -1149,7 +1150,8 @@
             }
           ]
         }
-      ]
+      ],
+      "video": "/videos/codex-10.mp4"
     },
     {
       "icon": "fa-solid fa-gears",
@@ -1263,7 +1265,8 @@
             }
           ]
         }
-      ]
+      ],
+      "video": "/videos/codex-11.mp4"
     },
     {
       "icon": "fa-solid fa-flag-checkered",
