@@ -24,19 +24,50 @@ npm run dev
 
 ## Структура проєкту
 
+Застосунок — це односторінковий клієнтський SPA (машина екранів у `GitWayApp.tsx`),
+прогрес зберігається в `localStorage` окремо для кожного акаунта-відділу.
+
 ```
 src/
   app/
-    page.tsx                # вхід — вибір профілю
-    roadmap/page.tsx        # дорожня карта курсу
-    lesson/[slug]/page.tsx  # сторінка уроку (теорія + пісочниця + квіз)
-    progress/page.tsx       # особистий прогрес
-    api/progress/route.ts   # API збереження прогресу
-  components/                # UI-компоненти (картки, квіз, пісочниця...)
+    page.tsx                     # рендерить <GitWayApp/>
+    layout.tsx, globals.css      # оболонка, шрифти, стилі
+  components/gitway/
+    GitWayApp.tsx                # весь застосунок: вхід, дорожня карта, уроки, квіз, прогрес
+    ui.tsx, AudioPlayer.tsx      # презентаційні компоненти
+    sandbox/                     # ВКЛАДКА «ПІСОЧНИЦЯ» (термінал + клон GitHub)
+      SandboxPanel.tsx           #   двоколонковий контейнер + вибір сценарію уроку
+      Terminal.tsx               #   інтерактивний термінал
+      GitHubClone.tsx            #   репо/гілки/коміти/PR/файли/staging
+      DiffView.tsx, CommitGraph.tsx
   lib/
-    course-data.ts           # ВЕСЬ контент курсу: фази, уроки, квізи
-    store.ts                 # сховище прогресу (зараз — локальний файл)
-    profiles.ts               # список профілів (~10 керівників відділів)
+    gitway-data.ts               # ВЕСЬ контент: LESSONS[11], CMDS, фази, бейджі
+    sx.ts                        # парсер інлайн-CSS -> React.CSSProperties
+    git-engine/                  # КЛІЄНТСЬКИЙ GIT-РУШІЙ (див. нижче)
+```
+
+## Пісочниця — клієнтський Git-рушій
+
+Вкладка **Пісочниця** (поряд із «Тренажером») дає справжню практику Git без
+жодного бекенду. Реальний **термінал** і **клон GitHub** працюють на одній
+спільній моделі даних, тож дії в одному місці одразу видно в іншому.
+
+- `src/lib/git-engine/` — самодостатній, серіалізовний у JSON, незалежний від
+  React рушій: контент-адресовані обʼєкти, індекс (staging), гілки, злиття
+  (fast-forward і три-стороннє з конфліктами), diff (LCS), stash, віддалені
+  репо (`clone`/`push`/`pull` у межах браузера), pull request'и.
+- Термінал підтримує `cd, ls, pwd, mkdir, rm, touch, cat, echo, mv, cp` та
+  `git init/add/commit/status/log/diff/branch/checkout/switch/merge/rebase/stash/remote/push/pull/clone`,
+  історію команд (↑/↓), Tab-доповнення, `Ctrl+C`/`Ctrl+L`.
+- Стан пісочниці зберігається в `localStorage` (`gitway:sandbox:v1:<акаунт>`).
+- Єдиний оракул `computeStatus()` живить і `git status` у терміналі, і панель
+  staging у GitHub-UI — вони не можуть розійтися.
+
+## Тести
+
+```bash
+npm test           # Vitest: рушій (одиничні) + компоненти пісочниці (jsdom)
+npm run test:watch
 ```
 
 ## Як додати новий урок
