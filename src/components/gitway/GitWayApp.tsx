@@ -5,6 +5,7 @@ import { sx } from "@/lib/sx";
 import { Clay, Icon } from "./ui";
 import { AudioPlayer } from "./AudioPlayer";
 import { SandboxPanel } from "./sandbox/SandboxPanel";
+import { CliPanel } from "./cli/CliPanel";
 import { GitEngine } from "@/lib/git-engine/store";
 import { loadWorkspace } from "@/lib/git-engine/persistence";
 import { createSeedWorkspace } from "@/lib/git-engine/seed";
@@ -18,18 +19,24 @@ import {
   PHASE_META,
   TOTAL_LESSONS,
   type Command,
+  type Lesson,
 } from "@/lib/gitway-data";
+import { matchesAccept } from "@/lib/content/matchCommand";
 
-type Screen = "login" | "roadmap" | "trainer" | "sandbox" | "lesson" | "quiz" | "progress";
+type Screen = "login" | "roadmap" | "trainer" | "sandbox" | "cli" | "lesson" | "quiz" | "progress";
 type TrMode = "cards" | "spell" | "ref";
 
-// 5 акаунтів-відділів. Прогрес кожного зберігається окремо (localStorage).
+// 9 акаунтів-відділів. Прогрес кожного зберігається окремо (localStorage).
 type Account = { key: string; name: string; role: string; initials: string; color: string; icon: string };
 
 const ACCOUNTS: Account[] = [
   { key: "zakupivli", name: "Відділ закупівель", role: "Постачання та закупівлі", icon: "fa-solid fa-cart-shopping", color: "#e6a15a", initials: "ВЗ" },
   { key: "prodazhi", name: "Відділ продажів", role: "Продажі та клієнти", icon: "fa-solid fa-handshake", color: "#14b8a6", initials: "ВП" },
   { key: "it", name: "Відділ ІТ", role: "Технічний відділ", icon: "fa-solid fa-laptop-code", color: "#7c6ee0", initials: "ІТ" },
+  { key: "finance", name: "Фінансовий відділ", role: "Фінанси та бюджет", icon: "fa-solid fa-coins", color: "#3fae7a", initials: "ФВ" },
+  { key: "legal", name: "Юридичний відділ", role: "Право та договори", icon: "fa-solid fa-scale-balanced", color: "#5b76c9", initials: "ЮВ" },
+  { key: "equipment", name: "Відділ обладнання", role: "Техніка та обладнання", icon: "fa-solid fa-screwdriver-wrench", color: "#b5793a", initials: "ВО" },
+  { key: "hr", name: "Відділ персоналу", role: "Кадри та персонал", icon: "fa-solid fa-users", color: "#cf6a9c", initials: "Пе" },
   { key: "director", name: "Директор", role: "Керівництво", icon: "fa-solid fa-user-tie", color: "#e0a03e", initials: "Ди" },
   { key: "test", name: "Тест", role: "Тестовий акаунт", icon: "fa-solid fa-flask", color: "#8fb8d9", initials: "Те" },
 ];
@@ -68,6 +75,10 @@ type State = {
   correct: number;
   quizDone: boolean;
   earned: number;
+  // командний квіз (CLI-курси)
+  cmdInput: string;
+  cmdChecked: boolean;
+  cmdOk: boolean;
   // trainer
   trCat: Command["cat"];
   trMode: TrMode;
@@ -77,6 +88,8 @@ type State = {
   spellInput: string;
   spellChecked: boolean;
   spellOk: boolean;
+  trQuery: string; // пошук за ключовим словом
+  trAll: boolean; // «усі джерела» (ігнорувати категорію)
 };
 
 const initialState: State = {
@@ -93,6 +106,9 @@ const initialState: State = {
   correct: 0,
   quizDone: false,
   earned: 0,
+  cmdInput: "",
+  cmdChecked: false,
+  cmdOk: false,
   trCat: "git",
   trMode: "cards",
   trIndex: 0,
@@ -101,6 +117,8 @@ const initialState: State = {
   spellInput: "",
   spellChecked: false,
   spellOk: false,
+  trQuery: "",
+  trAll: false,
 };
 
 const norm = (s: string) => (s || "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -146,6 +164,9 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
       correct: 0,
       quizDone: false,
       earned: 0,
+      cmdInput: "",
+      cmdChecked: false,
+      cmdOk: false,
       trCat: "git",
       trMode: "cards",
       trIndex: 0,
@@ -172,8 +193,12 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
     set({ screen: "sandbox" });
     scrollTop();
   };
+  const goCli = () => {
+    set({ screen: "cli" });
+    scrollTop();
+  };
   const startQuiz = () => {
-    set({ screen: "quiz", quizIndex: 0, selected: null, answered: false, correct: 0, quizDone: false, earned: 0 });
+    set({ screen: "quiz", quizIndex: 0, selected: null, answered: false, correct: 0, quizDone: false, earned: 0, cmdInput: "", cmdChecked: false, cmdOk: false });
     scrollTop();
   };
   const goTrainer = () => {
@@ -182,13 +207,25 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
   };
 
   // ---------- trainer ----------
+  // Єдиний перелік команд: «усі джерела» або одна категорія, плюс пошук.
+  const currentTrList = (st: State): Command[] => {
+    const source = st.trAll ? CMDS : CMDS.filter((c) => c.cat === st.trCat);
+    const q = norm(st.trQuery);
+    if (!q) return source;
+    return source.filter((c) => norm(c.cmd).includes(q) || norm(c.desc).includes(q) || norm(c.example).includes(q));
+  };
   const setTrCat = (c: Command["cat"]) =>
-    set({ trCat: c, trIndex: 0, trReveal: false, spellInput: "", spellChecked: false, spellOk: false });
+    set({ trCat: c, trAll: false, trIndex: 0, trReveal: false, spellInput: "", spellChecked: false, spellOk: false });
+  const setTrAll = () =>
+    set({ trAll: true, trIndex: 0, trReveal: false, spellInput: "", spellChecked: false, spellOk: false });
+  const setTrQuery = (q: string) =>
+    set({ trQuery: q, trIndex: 0, trReveal: false, spellChecked: false, spellOk: false });
   const setTrMode = (m: TrMode) =>
     set({ trMode: m, trReveal: false, trIndex: 0, spellInput: "", spellChecked: false, spellOk: false });
   const trDoReveal = () => set({ trReveal: true });
   const trAdvance = (known: boolean) => {
-    const list = CMDS.filter((c) => c.cat === s.trCat);
+    const list = currentTrList(s);
+    if (!list.length) return;
     const cur = list[s.trIndex % list.length];
     let kn = s.trKnown;
     if (known && cur && kn.indexOf(cur.id) < 0) kn = kn.concat([cur.id]);
@@ -196,7 +233,8 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
   };
   const spellCheck = () => {
     if (s.spellChecked) return;
-    const list = CMDS.filter((c) => c.cat === s.trCat);
+    const list = currentTrList(s);
+    if (!list.length) return;
     const cur = list[s.trIndex % list.length];
     const inp = norm(s.spellInput);
     if (!inp) return;
@@ -211,20 +249,30 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
 
   // ---------- quiz ----------
   const activeLesson = LESSONS.find((l) => l.id === s.activeId) || LESSONS[0];
+  // Кількість питань у квізі уроку: командний квіз має пріоритет над MCQ.
+  const quizCount = (l: Lesson) => l.commandQuiz?.length ?? l.quiz.length;
   const quizPick = (oi: number) => {
     if (s.answered) return;
     const q = activeLesson.quiz[s.quizIndex];
     set({ selected: oi, answered: true, correct: s.correct + (oi === q.correct ? 1 : 0) });
   };
+  // Командний квіз: перевірка введеної команди за accept-патернами.
+  const cmdCheck = () => {
+    if (s.cmdChecked) return;
+    const q = activeLesson.commandQuiz?.[s.quizIndex];
+    if (!q || !s.cmdInput.trim()) return;
+    const ok = matchesAccept(s.cmdInput, q.accept);
+    set({ cmdChecked: true, cmdOk: ok, correct: s.correct + (ok ? 1 : 0) });
+  };
   const quizNext = () => {
-    const total = activeLesson.quiz.length;
+    const total = quizCount(activeLesson);
     if (s.quizIndex + 1 >= total) {
       const gain = activeLesson.xp + s.correct * 20;
       const done = s.completed.includes(s.activeId) ? s.completed : s.completed.concat([s.activeId]);
       const nextCur = Math.min(TOTAL_LESSONS, Math.max(s.current, s.activeId + 1));
       set({ quizDone: true, earned: gain, xp: s.xp + gain, completed: done, current: nextCur });
     } else {
-      set({ quizIndex: s.quizIndex + 1, selected: null, answered: false });
+      set({ quizIndex: s.quizIndex + 1, selected: null, answered: false, cmdInput: "", cmdChecked: false, cmdOk: false });
     }
   };
 
@@ -265,6 +313,9 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
           <button onClick={goSandbox} style={sx(s.screen === "sandbox" ? navOn : navOff)}>
             <Icon name="fa-solid fa-terminal" /> Пісочниця
           </button>
+          <button onClick={goCli} style={sx(s.screen === "cli" ? navOn : navOff)}>
+            <Icon name="fa-solid fa-robot" /> CLI
+          </button>
           <button onClick={() => go("progress")} style={sx(s.screen === "progress" ? navOn : navOff)}>
             <Icon name="fa-solid fa-chart-simple" /> Мій прогрес
           </button>
@@ -299,20 +350,21 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
       <p style={sx("font-size:19px;color:#5b6d68;margin:0 0 36px;max-width:560px;text-align:center;text-wrap:pretty")}>
         Оберіть, під яким відділом увійти — прогрес кожного акаунта зберігається окремо.
       </p>
-      <div style={sx("display:flex;flex-wrap:wrap;justify-content:center;gap:18px;width:100%;max-width:730px")}>
+      {/* 9 відділів у сітці 5 + 4 (на вузьких екранах перенос адаптивний) */}
+      <div style={sx("display:flex;flex-wrap:wrap;justify-content:center;gap:16px;width:100%;max-width:960px")}>
         {ACCOUNTS.map((acc) => (
           <Clay
             key={acc.key}
             onClick={() => selectAccount(acc)}
-            base="display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;width:222px;padding:26px 20px;border:none;cursor:pointer;border-radius:26px;background:#fff;transition:transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .18s ease;box-shadow:0 16px 32px -18px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 12px rgba(255,255,255,.9)"
+            base="display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;width:178px;padding:22px 16px;border:none;cursor:pointer;border-radius:24px;background:#fff;transition:transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .18s ease;box-shadow:0 16px 32px -18px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 12px rgba(255,255,255,.9)"
             hover="transform:translateY(-5px);box-shadow:0 26px 40px -18px rgba(17,74,68,.35),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 12px rgba(255,255,255,.9)"
           >
-            <span style={sx(`display:grid;place-items:center;width:70px;height:70px;border-radius:22px;color:#fff;font-size:30px;background:${acc.color};box-shadow:0 12px 22px -8px ${acc.color}cc,inset 0 -4px 8px rgba(0,0,0,.15),inset 0 5px 9px rgba(255,255,255,.35)`)}>
+            <span style={sx(`display:grid;place-items:center;width:64px;height:64px;border-radius:20px;color:#fff;font-size:27px;background:${acc.color};box-shadow:0 12px 22px -8px ${acc.color}cc,inset 0 -4px 8px rgba(0,0,0,.15),inset 0 5px 9px rgba(255,255,255,.35)`)}>
               <Icon name={acc.icon} />
             </span>
             <span style={sx("display:flex;flex-direction:column;gap:3px")}>
-              <span style={sx("font-weight:800;font-size:17px;color:#14332f")}>{acc.name}</span>
-              <span style={sx("font-size:12.5px;color:#8b9c97;font-weight:600;line-height:1.3")}>{acc.role}</span>
+              <span style={sx("font-weight:800;font-size:15.5px;color:#14332f")}>{acc.name}</span>
+              <span style={sx("font-size:12px;color:#8b9c97;font-weight:600;line-height:1.3")}>{acc.role}</span>
             </span>
           </Clay>
         ))}
@@ -452,12 +504,14 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
 
   // ---------- trainer ----------
   const Trainer = () => {
-    const trList = CMDS.filter((c) => c.cat === s.trCat);
+    const trList = currentTrList(s);
     const trTotal = trList.length;
     const trPosIdx = trTotal ? s.trIndex % trTotal : 0;
-    const curC = trList[trPosIdx] || trList[0];
-    const cm = CAT_META[s.trCat];
+    const curC = trList[trPosIdx];
+    // У режимі «усі джерела» бейдж бере категорію поточної картки.
+    const cm = curC ? CAT_META[curC.cat] : CAT_META[s.trCat];
     const trKnownCount = trList.filter((c) => s.trKnown.indexOf(c.id) >= 0).length;
+    const empty = trTotal === 0;
 
     const chipBase = "display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border:none;cursor:pointer;border-radius:14px;font-weight:800;font-size:13.5px;transition:all .15s;";
     const segBase = "display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border:none;cursor:pointer;border-radius:12px;font-weight:800;font-size:14px;transition:all .15s;";
@@ -476,10 +530,10 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
           </div>
         </div>
         <p style={sx("margin:0 0 22px;color:#5b6d68;font-size:15.5px;line-height:1.55;text-wrap:pretty")}>
-          Тренуй памʼять: як пишуться команди й навіщо вони потрібні — Git, термінал, GitHub, Claude Code та Codex. Гортай картки або відкрий довідник.
+          Єдина бібліотека всіх команд курсу — Git, термінал, GitHub, Claude Code та Codex. Фільтруй за джерелом, шукай за словом, гортай картки або відкрий довідник.
         </p>
 
-        <div style={sx("display:inline-flex;gap:5px;padding:5px;border-radius:16px;margin-bottom:18px;background:#dde6e2;box-shadow:inset 0 2px 5px rgba(17,74,68,.1)")}>
+        <div style={sx("display:inline-flex;gap:5px;padding:5px;border-radius:16px;margin-bottom:16px;background:#dde6e2;box-shadow:inset 0 2px 5px rgba(17,74,68,.1)")}>
           <button onClick={() => setTrMode("cards")} style={sx(s.trMode === "cards" ? segOn : segOff)}>
             <Icon name="fa-solid fa-clone" /> Картки
           </button>
@@ -491,10 +545,36 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
           </button>
         </div>
 
+        <div style={sx("display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:11px 16px;border-radius:14px;background:#fff;box-shadow:inset 0 -3px 6px rgba(17,74,68,.05),inset 0 3px 5px rgba(255,255,255,.9),0 5px 12px -8px rgba(17,74,68,.2)")}>
+          <Icon name="fa-solid fa-magnifying-glass" style={sx("color:#8b9c97")} />
+          <input
+            value={s.trQuery}
+            onChange={(e) => setTrQuery(e.target.value)}
+            placeholder="Пошук команди за назвою або описом…"
+            aria-label="Пошук команди"
+            style={sx("flex:1;border:none;background:none;outline:none;font-size:14.5px;color:#14332f;font-family:inherit")}
+          />
+          {s.trQuery && (
+            <button onClick={() => setTrQuery("")} aria-label="Очистити пошук" style={sx("border:none;background:none;cursor:pointer;color:#a7b6b1")}>
+              <Icon name="fa-solid fa-xmark" />
+            </button>
+          )}
+        </div>
+
         <div style={sx("display:flex;flex-wrap:wrap;gap:9px;margin-bottom:24px")}>
+          <button
+            onClick={setTrAll}
+            style={sx(
+              s.trAll
+                ? chipBase + "color:#fff;background:#14332f;box-shadow:0 8px 15px -6px rgba(20,35,31,.5),inset 0 -3px 6px rgba(0,0,0,.15),inset 0 3px 5px rgba(255,255,255,.15);"
+                : chipBase + "color:#5b6d68;background:#fff;box-shadow:inset 0 -3px 6px rgba(17,74,68,.05),inset 0 3px 5px rgba(255,255,255,.9),0 5px 12px -8px rgba(17,74,68,.2);",
+            )}
+          >
+            <Icon name="fa-solid fa-layer-group" /> Усі джерела
+          </button>
           {CAT_ORDER.map(([k, label]) => {
             const meta = CAT_META[k];
-            const active = s.trCat === k;
+            const active = !s.trAll && s.trCat === k;
             const style = active
               ? chipBase + `color:#fff;background:${meta.color};box-shadow:0 8px 15px -6px ${meta.color}99,inset 0 -3px 6px rgba(0,0,0,.15),inset 0 3px 5px rgba(255,255,255,.25);`
               : chipBase + "color:#5b6d68;background:#fff;box-shadow:inset 0 -3px 6px rgba(17,74,68,.05),inset 0 3px 5px rgba(255,255,255,.9),0 5px 12px -8px rgba(17,74,68,.2);";
@@ -506,7 +586,14 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
           })}
         </div>
 
-        {s.trMode === "cards" && (
+        {empty && (
+          <div style={sx("padding:40px 24px;text-align:center;color:#8b9c97;font-weight:700;background:#fff;border-radius:24px;box-shadow:inset 0 -4px 8px rgba(17,74,68,.045),inset 0 4px 7px rgba(255,255,255,.9)")}>
+            <Icon name="fa-solid fa-magnifying-glass" style={sx("font-size:26px;margin-bottom:10px")} /><br />
+            Нічого не знайдено за запитом «{s.trQuery}».
+          </div>
+        )}
+
+        {s.trMode === "cards" && !empty && curC && (
           <>
             <div style={sx("display:flex;justify-content:space-between;align-items:center;margin-bottom:12px")}>
               <span style={sx("font-weight:800;font-size:14px;color:#8b9c97")}>Картка {trPosIdx + 1} / {trTotal}</span>
@@ -548,7 +635,7 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
           </>
         )}
 
-        {s.trMode === "spell" && (
+        {s.trMode === "spell" && !empty && curC && (
           <>
             <div style={sx("display:flex;justify-content:space-between;align-items:center;margin-bottom:12px")}>
               <span style={sx("font-weight:800;font-size:14px;color:#8b9c97")}>Питання {trPosIdx + 1} / {trTotal}</span>
@@ -606,14 +693,22 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
           </>
         )}
 
-        {s.trMode === "ref" && (
+        {s.trMode === "ref" && !empty && (
           <div style={sx("display:grid;grid-template-columns:repeat(2,1fr);gap:14px")}>
-            {trList.map((r) => (
-              <div key={r.id} style={sx("padding:18px 20px;border-radius:20px;background:#fff;box-shadow:inset 0 -4px 8px rgba(17,74,68,.045),inset 0 4px 7px rgba(255,255,255,.9),0 10px 22px -14px rgba(17,74,68,.22)")}>
-                <div style={sx("font-family:ui-monospace,Menlo,monospace;font-size:15px;font-weight:700;color:#0d7d70;margin-bottom:7px")}>$ {r.cmd}</div>
-                <div style={sx("font-size:13.5px;color:#5b6d68;line-height:1.45")}>{r.desc}</div>
-              </div>
-            ))}
+            {trList.map((r) => {
+              const rm = CAT_META[r.cat];
+              return (
+                <div key={r.id} style={sx("padding:18px 20px;border-radius:20px;background:#fff;box-shadow:inset 0 -4px 8px rgba(17,74,68,.045),inset 0 4px 7px rgba(255,255,255,.9),0 10px 22px -14px rgba(17,74,68,.22)")}>
+                  <div style={sx("display:flex;align-items:center;gap:8px;margin-bottom:8px")}>
+                    <span style={sx(`display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:20px;font-size:10.5px;font-weight:800;color:#fff;background:${rm.color}`)}>
+                      <Icon name={rm.icon} /> {rm.name}
+                    </span>
+                  </div>
+                  <div style={sx("font-family:ui-monospace,Menlo,monospace;font-size:15px;font-weight:700;color:#0d7d70;margin-bottom:7px")}>$ {r.cmd}</div>
+                  <div style={sx("font-size:13.5px;color:#5b6d68;line-height:1.45")}>{r.desc}</div>
+                </div>
+              );
+            })}
           </div>
         )}
       </main>
@@ -632,10 +727,20 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
     return <SandboxPanel engine={engine} account={s.user.name} />;
   };
 
+  // ---------- CLI (симулятор агентних CLI) ----------
+  const Cli = () => <CliPanel account={user.name} />;
+
+  // Порядковий номер уроку в межах його курсу (фази) + усього в курсі.
+  const lessonPos = (l: Lesson) => {
+    const inPhase = LESSONS.filter((x) => x.phase === l.phase);
+    return { idx: inPhase.findIndex((x) => x.id === l.id) + 1, total: inPhase.length };
+  };
+
   // ---------- lesson ----------
   const Lesson = () => {
     const al = activeLesson;
     const am = PHASE_META[al.phase];
+    const pos = lessonPos(al);
 
     return (
       <main style={sx("flex:1;max-width:900px;margin:0 auto;width:100%;padding:26px 24px 90px;animation:floatUp .4s ease")}>
@@ -644,19 +749,37 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
         </button>
         <div style={sx("display:flex;align-items:center;gap:8px;margin-bottom:6px")}>
           <span style={sx(`padding:4px 12px;border-radius:20px;background:${am.color};color:#fff;font-size:12px;font-weight:800`)}>{am.name}</span>
-          <span style={sx("color:#8b9c97;font-weight:700;font-size:13.5px")}>Урок {al.id} з {TOTAL_LESSONS} · {al.duration}</span>
+          <span style={sx("color:#8b9c97;font-weight:700;font-size:13.5px")}>Урок {pos.idx} з {pos.total} · {al.duration}</span>
         </div>
         <h1 className="disp" style={sx("font-size:32px;font-weight:800;letter-spacing:-.7px;margin-bottom:20px")}>{al.title}</h1>
 
         {/* video (без звуку) */}
-        {al.video && (
+        {al.video ? (
           <div style={sx("width:100%;aspect-ratio:16/9;border-radius:26px;overflow:hidden;margin-bottom:22px;background:#0f2a27;box-shadow:0 18px 40px -18px rgba(17,74,68,.35),inset 0 0 0 1px rgba(17,74,68,.05)")}>
             <video src={al.video} controls playsInline preload="metadata" style={{ width: "100%", height: "100%", display: "block", objectFit: "cover" }} />
           </div>
+        ) : (
+          al.commandQuiz && (
+            <div style={sx("width:100%;aspect-ratio:16/9;border-radius:26px;margin-bottom:22px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#eef3f1;color:#8b9c97;box-shadow:inset 0 0 0 2px rgba(17,74,68,.08)")}>
+              <Icon name="fa-solid fa-film" style={sx("font-size:34px")} />
+              <span style={sx("font-weight:800;font-size:15px")}>Відео-слот</span>
+              <span style={sx("font-size:13px")}>Відео до уроку буде додано</span>
+            </div>
+          )
         )}
 
         {/* окрема озвучка уроку */}
-        {al.audio && <AudioPlayer src={al.audio} />}
+        {al.audio ? (
+          <AudioPlayer src={al.audio} />
+        ) : (
+          al.commandQuiz && (
+            <div style={sx("display:flex;align-items:center;gap:12px;padding:16px 20px;border-radius:20px;margin-bottom:0;background:#f5f8f7;color:#8b9c97;box-shadow:inset 0 0 0 2px rgba(17,74,68,.06)")}>
+              <Icon name="fa-solid fa-headphones" style={sx("font-size:20px")} />
+              <span style={sx("font-weight:800;font-size:14px")}>Аудіо-слот</span>
+              <span style={sx("font-size:13px")}>Озвучку уроку буде додано</span>
+            </div>
+          )
+        )}
 
         {/* analogy */}
         <div style={sx("display:flex;gap:16px;padding:22px 24px;border-radius:24px;margin-bottom:22px;background:#fff;box-shadow:0 14px 32px -18px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 11px rgba(255,255,255,.9)")}>
@@ -710,7 +833,62 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
   };
 
   // ---------- quiz ----------
-  const Quiz = () => {
+  // Питання командного квізу: сценарій + поле для введення команди.
+  const CommandQuestion = () => {
+    const cq = activeLesson.commandQuiz!;
+    const q = cq[s.quizIndex];
+    const inpStyle = s.cmdChecked
+      ? s.cmdOk
+        ? "width:100%;font-family:ui-monospace,Menlo,monospace;font-size:17px;font-weight:700;padding:15px 18px;border:none;border-radius:14px;background:#0f2a27;color:#7ee6d3;box-shadow:inset 0 0 0 2px #14b8a6;outline:none"
+        : "width:100%;font-family:ui-monospace,Menlo,monospace;font-size:17px;font-weight:700;padding:15px 18px;border:none;border-radius:14px;background:#0f2a27;color:#ff9b8a;box-shadow:inset 0 0 0 2px #e57373;outline:none"
+      : "width:100%;font-family:ui-monospace,Menlo,monospace;font-size:17px;font-weight:700;padding:15px 18px;border:none;border-radius:14px;background:#0f2a27;color:#eafaf7;box-shadow:inset 0 2px 8px rgba(0,0,0,.3);outline:none";
+    return (
+      <>
+        <h1 className="disp" style={sx("font-size:24px;font-weight:800;letter-spacing:-.4px;margin-bottom:8px;line-height:1.3;text-wrap:pretty")}>{q.scenario}</h1>
+        <p style={sx("margin:0 0 18px;color:#8b9c97;font-size:14px;font-weight:600")}>
+          <Icon name="fa-solid fa-keyboard" /> Введіть команду й натисніть Enter
+        </p>
+        <div style={sx("display:flex;align-items:center;gap:10px")}>
+          <span style={sx("font-family:ui-monospace,Menlo,monospace;font-size:18px;font-weight:800;color:#2dd4bf;flex:none")}>$</span>
+          <input
+            value={s.cmdInput}
+            onChange={(e) => { if (!s.cmdChecked) set({ cmdInput: e.target.value }); }}
+            onKeyDown={(e) => { if (e.key === "Enter") { if (s.cmdChecked) quizNext(); else cmdCheck(); } }}
+            placeholder="введіть команду…"
+            spellCheck={false}
+            autoCapitalize="off"
+            autoComplete="off"
+            aria-label="Поле введення команди"
+            style={sx(inpStyle)}
+          />
+        </div>
+        {!s.cmdChecked && q.hint && (
+          <p style={sx("margin:12px 2px 0;color:#a7b6b1;font-size:13px;font-weight:600")}>
+            <Icon name="fa-solid fa-lightbulb" style={sx("color:#e6a15a")} /> Підказка: {q.hint}
+          </p>
+        )}
+        {s.cmdChecked && (
+          <>
+            <div style={sx("display:flex;align-items:flex-start;gap:10px;margin-top:18px;padding:14px 18px;border-radius:16px;font-weight:700;font-size:14.5px;line-height:1.5;" + (s.cmdOk ? "background:#e5f8f3;color:#0d7d70;" : "background:#fdecea;color:#c0392b;"))}>
+              <Icon name={s.cmdOk ? "fa-solid fa-circle-check" : "fa-solid fa-circle-info"} />{" "}
+              <span>{(s.cmdOk ? "Правильно! " : "Не зовсім. ") + q.explanation}</span>
+            </div>
+            <button onClick={quizNext} style={sx("display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-top:16px;padding:16px;border:none;cursor:pointer;border-radius:18px;font-weight:800;font-size:16px;color:#fff;background:#14b8a6;box-shadow:0 14px 26px -10px rgba(20,184,166,.6),inset 0 -5px 10px rgba(6,95,85,.4),inset 0 5px 9px rgba(255,255,255,.32)")}>
+              {s.quizIndex + 1 >= activeLesson.commandQuiz!.length ? "Завершити урок" : "Наступне питання"} <Icon name="fa-solid fa-arrow-right" />
+            </button>
+          </>
+        )}
+        {!s.cmdChecked && (
+          <button onClick={cmdCheck} style={sx("width:100%;margin-top:18px;padding:15px;border:none;cursor:pointer;border-radius:16px;font-weight:800;font-size:16px;color:#fff;background:#14b8a6;box-shadow:0 14px 26px -10px rgba(20,184,166,.6),inset 0 -5px 10px rgba(6,95,85,.4),inset 0 5px 9px rgba(255,255,255,.32)")}>
+            <Icon name="fa-solid fa-check-double" /> Перевірити
+          </button>
+        )}
+      </>
+    );
+  };
+
+  // Питання MCQ-квізу (класичні уроки Git/GitHub).
+  const McqQuestion = () => {
     const quiz = activeLesson.quiz;
     const total = quiz.length;
     const q = quiz[s.quizIndex];
@@ -720,6 +898,64 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
       "display:flex;align-items:flex-start;gap:10px;margin-top:16px;padding:14px 18px;border-radius:16px;font-weight:700;font-size:14.5px;line-height:1.5;" +
       (wasCorrect ? "background:#e5f8f3;color:#0d7d70;" : "background:#fdecea;color:#c0392b;");
     const nextLabel = s.quizIndex + 1 >= total ? "Завершити урок" : "Наступне питання";
+    return (
+      <>
+        <h1 className="disp" style={sx("font-size:26px;font-weight:800;letter-spacing:-.4px;margin-bottom:22px;line-height:1.25;text-wrap:pretty")}>{q.text}</h1>
+        <div style={sx("display:flex;flex-direction:column;gap:13px")}>
+          {q.opts.map((label, oi) => {
+            const isSel = s.selected === oi;
+            const isCor = oi === q.correct;
+            let style = optBase;
+            let badgeStyle = "display:grid;place-items:center;flex:none;width:32px;height:32px;border-radius:10px;font-weight:800;font-size:14px;";
+            let icon = "";
+            let iconStyle = "opacity:0;";
+            if (!s.answered) {
+              style += "cursor:pointer;color:#14332f;box-shadow:inset 0 -4px 8px rgba(17,74,68,.045),inset 0 4px 7px rgba(255,255,255,.9),0 8px 18px -11px rgba(17,74,68,.2);";
+              badgeStyle += "background:#eef3f1;color:#5b6d68;";
+            } else {
+              style += "cursor:default;";
+              if (isCor) {
+                style += "color:#0d7d70;background:#e5f8f3;box-shadow:inset 0 0 0 2px #14b8a6;";
+                badgeStyle += "background:#14b8a6;color:#fff;";
+                icon = "fa-solid fa-check";
+                iconStyle = "color:#14b8a6;";
+              } else if (isSel) {
+                style += "color:#c0392b;background:#fdecea;box-shadow:inset 0 0 0 2px #e57373;";
+                badgeStyle += "background:#e57373;color:#fff;";
+                icon = "fa-solid fa-xmark";
+                iconStyle = "color:#e57373;";
+              } else {
+                style += "color:#9aaba6;opacity:.6;";
+                badgeStyle += "background:#eef3f1;color:#9aaba6;";
+              }
+            }
+            return (
+              <button key={oi} onClick={() => quizPick(oi)} style={sx(style)}>
+                <span style={sx(badgeStyle)}>{String.fromCharCode(65 + oi)}</span>
+                <span style={sx("flex:1")}>{label}</span>
+                <Icon name={icon || "fa-solid fa-check"} style={sx(iconStyle)} />
+              </button>
+            );
+          })}
+        </div>
+        {s.answered && (
+          <>
+            <div style={sx(fbStyle)}>
+              <Icon name={wasCorrect ? "fa-solid fa-circle-check" : "fa-solid fa-circle-info"} />{" "}
+              <span>{(wasCorrect ? "Правильно! " : "Не зовсім. ") + q.expl}</span>
+            </div>
+            <button onClick={quizNext} style={sx("display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-top:16px;padding:16px;border:none;cursor:pointer;border-radius:18px;font-weight:800;font-size:16px;color:#fff;background:#14b8a6;box-shadow:0 14px 26px -10px rgba(20,184,166,.6),inset 0 -5px 10px rgba(6,95,85,.4),inset 0 5px 9px rgba(255,255,255,.32)")}>
+              {nextLabel} <Icon name="fa-solid fa-arrow-right" />
+            </button>
+          </>
+        )}
+      </>
+    );
+  };
+
+  const Quiz = () => {
+    const isCmd = !!(activeLesson.commandQuiz && activeLesson.commandQuiz.length);
+    const total = isCmd ? activeLesson.commandQuiz!.length : activeLesson.quiz.length;
 
     return (
       <main style={sx("flex:1;max-width:720px;margin:0 auto;width:100%;padding:34px 24px 90px;animation:floatUp .4s ease")}>
@@ -756,7 +992,7 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
         ) : (
           <>
             <div style={sx("display:flex;align-items:center;gap:6px;margin-bottom:18px")}>
-              {quiz.map((_, i) => {
+              {Array.from({ length: total }).map((_, i) => {
                 let bg = "#e0e8e5";
                 if (i < s.quizIndex) bg = "#14b8a6";
                 else if (i === s.quizIndex) bg = "#2dd4bf";
@@ -764,55 +1000,7 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
               })}
               <span style={sx("margin-left:auto;font-weight:800;color:#8b9c97;font-size:14px")}>Питання {s.quizIndex + 1} / {total}</span>
             </div>
-            <h1 className="disp" style={sx("font-size:26px;font-weight:800;letter-spacing:-.4px;margin-bottom:22px;line-height:1.25;text-wrap:pretty")}>{q.text}</h1>
-            <div style={sx("display:flex;flex-direction:column;gap:13px")}>
-              {q.opts.map((label, oi) => {
-                const isSel = s.selected === oi;
-                const isCor = oi === q.correct;
-                let style = optBase;
-                let badgeStyle = "display:grid;place-items:center;flex:none;width:32px;height:32px;border-radius:10px;font-weight:800;font-size:14px;";
-                let icon = "";
-                let iconStyle = "opacity:0;";
-                if (!s.answered) {
-                  style += "cursor:pointer;color:#14332f;box-shadow:inset 0 -4px 8px rgba(17,74,68,.045),inset 0 4px 7px rgba(255,255,255,.9),0 8px 18px -11px rgba(17,74,68,.2);";
-                  badgeStyle += "background:#eef3f1;color:#5b6d68;";
-                } else {
-                  style += "cursor:default;";
-                  if (isCor) {
-                    style += "color:#0d7d70;background:#e5f8f3;box-shadow:inset 0 0 0 2px #14b8a6;";
-                    badgeStyle += "background:#14b8a6;color:#fff;";
-                    icon = "fa-solid fa-check";
-                    iconStyle = "color:#14b8a6;";
-                  } else if (isSel) {
-                    style += "color:#c0392b;background:#fdecea;box-shadow:inset 0 0 0 2px #e57373;";
-                    badgeStyle += "background:#e57373;color:#fff;";
-                    icon = "fa-solid fa-xmark";
-                    iconStyle = "color:#e57373;";
-                  } else {
-                    style += "color:#9aaba6;opacity:.6;";
-                    badgeStyle += "background:#eef3f1;color:#9aaba6;";
-                  }
-                }
-                return (
-                  <button key={oi} onClick={() => quizPick(oi)} style={sx(style)}>
-                    <span style={sx(badgeStyle)}>{String.fromCharCode(65 + oi)}</span>
-                    <span style={sx("flex:1")}>{label}</span>
-                    <Icon name={icon || "fa-solid fa-check"} style={sx(iconStyle)} />
-                  </button>
-                );
-              })}
-            </div>
-            {s.answered && (
-              <>
-                <div style={sx(fbStyle)}>
-                  <Icon name={wasCorrect ? "fa-solid fa-circle-check" : "fa-solid fa-circle-info"} />{" "}
-                  <span>{(wasCorrect ? "Правильно! " : "Не зовсім. ") + q.expl}</span>
-                </div>
-                <button onClick={quizNext} style={sx("display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-top:16px;padding:16px;border:none;cursor:pointer;border-radius:18px;font-weight:800;font-size:16px;color:#fff;background:#14b8a6;box-shadow:0 14px 26px -10px rgba(20,184,166,.6),inset 0 -5px 10px rgba(6,95,85,.4),inset 0 5px 9px rgba(255,255,255,.32)")}>
-                  {nextLabel} <Icon name="fa-solid fa-arrow-right" />
-                </button>
-              </>
-            )}
+            {isCmd ? CommandQuestion() : McqQuestion()}
           </>
         )}
       </main>
@@ -951,6 +1139,7 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
       {s.screen === "roadmap" && Roadmap()}
       {s.screen === "trainer" && Trainer()}
       {s.screen === "sandbox" && Sandbox()}
+      {s.screen === "cli" && Cli()}
       {s.screen === "lesson" && Lesson()}
       {s.screen === "quiz" && Quiz()}
       {s.screen === "progress" && Progress()}
