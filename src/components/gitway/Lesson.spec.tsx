@@ -25,14 +25,14 @@ function openFirstClaudeLesson() {
 }
 
 describe("CLI-урок: реальний контент + командний квіз", () => {
-  it("показує аудіо, опис і слот відео, потім веде до тесту", () => {
+  it("показує опис і аудіо, без порожнього відео-слоту, потім веде до тесту", () => {
     openFirstClaudeLesson();
     // на сторінці уроку є номер у межах курсу
     expect(screen.getByText(/Урок 1 з 12/)).toBeTruthy();
     // реальний опис із файлу
     expect(screen.getByText(/інструмент від компанії/)).toBeTruthy();
-    // слот відео (реального mp4 ще нема)
-    expect(screen.getByText("Відео-слот")).toBeTruthy();
+    // порожнього відео-слоту немає (відео поки не додано)
+    expect(screen.queryByText("Відео-слот")).toBeNull();
     // кнопка переходу до тесту
     expect(screen.getByText(/пройти квіз/)).toBeTruthy();
   });

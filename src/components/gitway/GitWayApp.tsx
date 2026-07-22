@@ -753,33 +753,15 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
         </div>
         <h1 className="disp" style={sx("font-size:32px;font-weight:800;letter-spacing:-.7px;margin-bottom:20px")}>{al.title}</h1>
 
-        {/* video (без звуку) */}
-        {al.video ? (
+        {/* video — показуємо плеєр лише коли відео є (для CLI-уроків його поки нема) */}
+        {al.video && (
           <div style={sx("width:100%;aspect-ratio:16/9;border-radius:26px;overflow:hidden;margin-bottom:22px;background:#0f2a27;box-shadow:0 18px 40px -18px rgba(17,74,68,.35),inset 0 0 0 1px rgba(17,74,68,.05)")}>
             <video src={al.video} controls playsInline preload="metadata" style={{ width: "100%", height: "100%", display: "block", objectFit: "cover" }} />
           </div>
-        ) : (
-          al.commandQuiz && (
-            <div style={sx("width:100%;aspect-ratio:16/9;border-radius:26px;margin-bottom:22px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#eef3f1;color:#8b9c97;box-shadow:inset 0 0 0 2px rgba(17,74,68,.08)")}>
-              <Icon name="fa-solid fa-film" style={sx("font-size:34px")} />
-              <span style={sx("font-weight:800;font-size:15px")}>Відео-слот</span>
-              <span style={sx("font-size:13px")}>Відео до уроку буде додано</span>
-            </div>
-          )
         )}
 
         {/* окрема озвучка уроку */}
-        {al.audio ? (
-          <AudioPlayer src={al.audio} />
-        ) : (
-          al.commandQuiz && (
-            <div style={sx("display:flex;align-items:center;gap:12px;padding:16px 20px;border-radius:20px;margin-bottom:0;background:#f5f8f7;color:#8b9c97;box-shadow:inset 0 0 0 2px rgba(17,74,68,.06)")}>
-              <Icon name="fa-solid fa-headphones" style={sx("font-size:20px")} />
-              <span style={sx("font-weight:800;font-size:14px")}>Аудіо-слот</span>
-              <span style={sx("font-size:13px")}>Озвучку уроку буде додано</span>
-            </div>
-          )
-        )}
+        {al.audio && <AudioPlayer src={al.audio} />}
 
         {/* analogy — лише для класичних уроків (CLI-курси дають опис у теорії) */}
         {!al.commandQuiz && (
