@@ -5,6 +5,7 @@ import { sx } from "@/lib/sx";
 import { Icon } from "../ui";
 import type { GitEngine } from "@/lib/git-engine/store";
 import { LESSONS } from "@/lib/gitway-data";
+import { complete } from "@/lib/git-engine/complete";
 import { Terminal } from "./Terminal";
 import { GitHubClone } from "./GitHubClone";
 
@@ -78,7 +79,11 @@ export function SandboxPanel({ engine, account }: { engine: GitEngine; account: 
 
       <div style={sx("display:flex;flex-wrap:wrap;gap:18px;align-items:stretch")}>
         <div style={sx("flex:1 1 460px;min-width:0;min-height:520px;border-radius:16px;overflow:hidden;box-shadow:0 20px 44px -20px rgba(17,74,68,.4)")}>
-          <Terminal engine={engine} account={account} />
+          <Terminal
+            backend={engine}
+            account={account}
+            complete={(line, cursor) => complete(line, cursor, engine.workspace())}
+          />
         </div>
         <div style={sx("flex:1 1 460px;min-width:0;min-height:520px;max-height:78vh")}>
           <GitHubClone engine={engine} account={account} />

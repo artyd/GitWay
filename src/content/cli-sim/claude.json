@@ -1,0 +1,115 @@
+{
+  "tool": "claude",
+  "prompt": "claude>",
+  "title": "claude code — симуляція",
+  "seed": [
+    { "text": "Claude Code (симуляція) — навчальне середовище GitШлях.", "tone": "meta" },
+    { "text": "Спробуйте: /help, /init, /model, /agents, або опишіть задачу словами.", "tone": "hint" }
+  ],
+  "initialState": { "cwd": "~/project", "model": "sonnet" },
+  "entries": [
+    {
+      "match": { "kind": "exact", "value": "/help" },
+      "response": { "lines": [
+        { "text": "Доступні команди (симуляція):", "tone": "meta" },
+        { "text": "  /init         створити CLAUDE.md з контекстом проєкту", "tone": "out" },
+        { "text": "  /clear        очистити контекст розмови", "tone": "out" },
+        { "text": "  /compact      стиснути історію, зберігши суть", "tone": "out" },
+        { "text": "  /model        обрати модель", "tone": "out" },
+        { "text": "  /agents       керувати субагентами", "tone": "out" },
+        { "text": "  /permissions  налаштувати дозволи", "tone": "out" },
+        { "text": "  /review       переглянути код", "tone": "out" },
+        { "text": "  або просто опишіть задачу звичайною мовою", "tone": "hint" }
+      ] }
+    },
+    {
+      "match": { "kind": "exact", "value": "/init" },
+      "response": {
+        "setState": { "hasProjectDoc": true },
+        "lines": [
+          { "text": "Аналізую структуру проєкту…", "tone": "meta" },
+          { "text": "✓ Створено CLAUDE.md з описом проєкту, командами збірки й угодами.", "tone": "add" },
+          { "text": "Тепер асистент памʼятає контекст між сесіями.", "tone": "hint" }
+        ]
+      }
+    },
+    {
+      "match": { "kind": "exact", "value": "/clear" },
+      "response": { "clear": true, "lines": [] }
+    },
+    {
+      "match": { "kind": "exact", "value": "/compact" },
+      "response": { "lines": [
+        { "text": "Стискаю історію розмови…", "tone": "meta" },
+        { "text": "✓ Контекст стиснуто. Ключові рішення збережено, зайве прибрано.", "tone": "add" }
+      ] }
+    },
+    {
+      "match": { "kind": "prefix", "value": "/model" },
+      "response": {
+        "setState": { "model": "opus" },
+        "lines": [
+          { "text": "Доступні моделі: haiku · sonnet · opus", "tone": "meta" },
+          { "text": "✓ Обрано модель: opus (потужніша, для складніших задач).", "tone": "add" }
+        ]
+      }
+    },
+    {
+      "match": { "kind": "exact", "value": "/agents" },
+      "response": { "lines": [
+        { "text": "Субагенти (симуляція):", "tone": "meta" },
+        { "text": "  • explorer  — швидкий пошук у кодовій базі", "tone": "out" },
+        { "text": "  • reviewer  — рев'ю змін", "tone": "out" },
+        { "text": "Делегуйте: «доручи explorer знайти всі виклики API».", "tone": "hint" }
+      ] }
+    },
+    {
+      "match": { "kind": "exact", "value": "/permissions" },
+      "response": { "lines": [
+        { "text": "Режими дозволів (симуляція):", "tone": "meta" },
+        { "text": "  default      питати перед змінами/командами", "tone": "out" },
+        { "text": "  plan         лише планувати, без змін", "tone": "out" },
+        { "text": "  auto-accept  застосовувати правки без запиту", "tone": "out" },
+        { "text": "Поточний режим: default", "tone": "hint" }
+      ] }
+    },
+    {
+      "match": { "kind": "exact", "value": "/review" },
+      "response": { "lines": [
+        { "text": "Переглядаю останні зміни…", "tone": "meta" },
+        { "text": "✓ Знайдено 2 зауваження і 1 пропозицію (симуляція).", "tone": "add" },
+        { "text": "— бракує обробки помилки у fetchData()", "tone": "warn" }
+      ] }
+    },
+    {
+      "match": { "kind": "regex", "value": "^claude\\s+(-p|--print)\\s+.+" },
+      "response": { "lines": [
+        { "text": "Headless-режим: виконую задачу без діалогу…", "tone": "meta" },
+        { "text": "» {{arg}}", "tone": "hint" },
+        { "text": "✓ Готово (симуляція). Результат виведено у stdout.", "tone": "add" }
+      ] }
+    },
+    {
+      "match": { "kind": "regex", "value": "^claude\\s+(--continue|-c)$" },
+      "response": { "lines": [
+        { "text": "Відновлюю останню сесію…", "tone": "meta" },
+        { "text": "✓ Контекст попередньої розмови завантажено.", "tone": "add" }
+      ] }
+    },
+    {
+      "match": { "kind": "prefix", "value": "/" },
+      "priority": -1,
+      "response": { "lines": [{ "text": "Невідома команда. Введіть /help для списку.", "tone": "err" }] }
+    }
+  ],
+  "fallback": {
+    "lines": [
+      { "text": "Обмірковую запит: «{{input}}»…", "tone": "meta" },
+      { "text": "План (симуляція):", "tone": "hint" },
+      { "text": "  1. знайти відповідні файли", "tone": "out" },
+      { "text": "  2. внести зміни", "tone": "out" },
+      { "text": "  3. запустити перевірки", "tone": "out" },
+      { "text": "Підтвердьте, і я застосую зміни (або /permissions для авто-режиму).", "tone": "hint" }
+    ]
+  }
+}
