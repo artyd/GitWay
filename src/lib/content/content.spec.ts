@@ -29,9 +29,16 @@ describe("завантаження курсів у LESSONS", () => {
       for (const q of l.commandQuiz!) {
         expect(q.scenario).toBeTruthy();
         expect(q.explanation).toBeTruthy();
-        expect(q.accept.length).toBeGreaterThan(0);
+        // питання або з вибором (options+correct), або з введенням (accept)
+        const hasChoice = Array.isArray(q.options) && q.options.length >= 2 && typeof q.correct === "number";
+        const hasInput = Array.isArray(q.accept) && q.accept.length > 0;
+        expect(hasChoice || hasInput).toBe(true);
       }
     }
+    // у кожному CLI-курсі є і питання з вибором, і з введенням
+    const cli = LESSONS.filter((x) => x.phase >= 4);
+    expect(cli.some((l) => l.commandQuiz!.some((q) => q.options))).toBe(true);
+    expect(cli.some((l) => l.commandQuiz!.some((q) => q.accept))).toBe(true);
   });
 
   it("базові 11 уроків лишились MCQ (без commandQuiz)", () => {
@@ -115,7 +122,7 @@ describe("уніфікований каталог", () => {
   it("усі cmd-посилання квізів існують у каталозі", () => {
     for (const l of LESSONS) {
       for (const q of l.commandQuiz ?? []) {
-        for (const a of q.accept) {
+        for (const a of q.accept ?? []) {
           if (a.kind === "cmd") expect(CATALOG_IDS.has(a.id)).toBe(true);
         }
       }

@@ -261,9 +261,16 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
   const cmdCheck = () => {
     if (s.cmdChecked) return;
     const q = activeLesson.commandQuiz?.[s.quizIndex];
-    if (!q || !s.cmdInput.trim()) return;
+    if (!q || !q.accept || !s.cmdInput.trim()) return;
     const ok = matchesAccept(s.cmdInput, q.accept);
     set({ cmdChecked: true, cmdOk: ok, correct: s.correct + (ok ? 1 : 0) });
+  };
+  // Питання з вибором відповіді (легший режим): клік по варіанту.
+  const cmdMcqPick = (oi: number) => {
+    if (s.answered) return;
+    const q = activeLesson.commandQuiz?.[s.quizIndex];
+    if (!q || q.correct == null) return;
+    set({ selected: oi, answered: true, correct: s.correct + (oi === q.correct ? 1 : 0) });
   };
   const quizNext = () => {
     const total = quizCount(activeLesson);
@@ -828,10 +835,66 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
   };
 
   // ---------- quiz ----------
-  // Питання командного квізу: сценарій + поле для введення команди.
+  // Питання командного квізу: вибір відповіді АБО введення команди.
   const CommandQuestion = () => {
     const cq = activeLesson.commandQuiz!;
     const q = cq[s.quizIndex];
+    const nextLabel = s.quizIndex + 1 >= cq.length ? "Завершити урок" : "Наступне питання";
+
+    // ── режим вибору відповіді (легший) ──
+    if (q.options) {
+      const wasCorrect = s.selected === q.correct;
+      return (
+        <>
+          <h1 className="disp" style={sx("font-size:24px;font-weight:800;letter-spacing:-.4px;margin-bottom:8px;line-height:1.3;text-wrap:pretty")}>{q.scenario}</h1>
+          <p style={sx("margin:0 0 18px;color:#8b9c97;font-size:14px;font-weight:600")}>
+            <Icon name="fa-solid fa-list-check" /> Оберіть правильну команду
+          </p>
+          <div style={sx("display:flex;flex-direction:column;gap:12px")}>
+            {q.options.map((label, oi) => {
+              const isSel = s.selected === oi;
+              const isCor = oi === q.correct;
+              let st = "display:flex;align-items:center;gap:14px;text-align:left;padding:15px 18px;border:none;border-radius:16px;font-family:ui-monospace,Menlo,monospace;font-weight:700;font-size:15px;transition:all .18s;background:#fff;";
+              let badge = "display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:9px;font-weight:800;font-size:13px;font-family:Nunito,sans-serif;";
+              if (!s.answered) {
+                st += "cursor:pointer;color:#14332f;box-shadow:inset 0 -4px 8px rgba(17,74,68,.045),inset 0 4px 7px rgba(255,255,255,.9),0 8px 18px -11px rgba(17,74,68,.2);";
+                badge += "background:#eef3f1;color:#5b6d68;";
+              } else if (isCor) {
+                st += "cursor:default;color:#0d7d70;background:#e5f8f3;box-shadow:inset 0 0 0 2px #14b8a6;";
+                badge += "background:#14b8a6;color:#fff;";
+              } else if (isSel) {
+                st += "cursor:default;color:#c0392b;background:#fdecea;box-shadow:inset 0 0 0 2px #e57373;";
+                badge += "background:#e57373;color:#fff;";
+              } else {
+                st += "cursor:default;color:#9aaba6;opacity:.6;";
+                badge += "background:#eef3f1;color:#9aaba6;";
+              }
+              return (
+                <button key={oi} onClick={() => cmdMcqPick(oi)} style={sx(st)}>
+                  <span style={sx(badge)}>{String.fromCharCode(65 + oi)}</span>
+                  <span style={sx("flex:1")}>{label}</span>
+                  {s.answered && isCor && <Icon name="fa-solid fa-check" style={sx("color:#14b8a6")} />}
+                  {s.answered && isSel && !isCor && <Icon name="fa-solid fa-xmark" style={sx("color:#e57373")} />}
+                </button>
+              );
+            })}
+          </div>
+          {s.answered && (
+            <>
+              <div style={sx("display:flex;align-items:flex-start;gap:10px;margin-top:16px;padding:14px 18px;border-radius:16px;font-weight:700;font-size:14.5px;line-height:1.5;" + (wasCorrect ? "background:#e5f8f3;color:#0d7d70;" : "background:#fdecea;color:#c0392b;"))}>
+                <Icon name={wasCorrect ? "fa-solid fa-circle-check" : "fa-solid fa-circle-info"} />{" "}
+                <span>{(wasCorrect ? "Правильно! " : "Не зовсім. ") + q.explanation}</span>
+              </div>
+              <button onClick={quizNext} style={sx("display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-top:16px;padding:16px;border:none;cursor:pointer;border-radius:18px;font-weight:800;font-size:16px;color:#fff;background:#14b8a6;box-shadow:0 14px 26px -10px rgba(20,184,166,.6),inset 0 -5px 10px rgba(6,95,85,.4),inset 0 5px 9px rgba(255,255,255,.32)")}>
+                {nextLabel} <Icon name="fa-solid fa-arrow-right" />
+              </button>
+            </>
+          )}
+        </>
+      );
+    }
+
+    // ── режим введення команди ──
     const inpStyle = s.cmdChecked
       ? s.cmdOk
         ? "width:100%;font-family:ui-monospace,Menlo,monospace;font-size:17px;font-weight:700;padding:15px 18px;border:none;border-radius:14px;background:#0f2a27;color:#7ee6d3;box-shadow:inset 0 0 0 2px #14b8a6;outline:none"
