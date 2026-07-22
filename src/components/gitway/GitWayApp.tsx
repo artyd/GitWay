@@ -6,6 +6,7 @@ import { Clay, Icon } from "./ui";
 import { AudioPlayer } from "./AudioPlayer";
 import { SandboxPanel } from "./sandbox/SandboxPanel";
 import { CliPanel } from "./cli/CliPanel";
+import { LessonContent } from "./LessonContent";
 import { GitEngine } from "@/lib/git-engine/store";
 import { loadWorkspace } from "@/lib/git-engine/persistence";
 import { createSeedWorkspace } from "@/lib/git-engine/seed";
@@ -776,24 +777,28 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
           </div>
         )}
 
-        {/* theory / опис уроку */}
-        <div style={sx("border-radius:26px;background:#fff;padding:26px 28px;margin-bottom:22px;box-shadow:0 16px 36px -22px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 11px rgba(255,255,255,.9)")}>
-          {al.sections.map((sec, si) => (
-            <div key={si} style={sx(si > 0 ? "margin-top:22px;padding-top:22px;border-top:1px solid #eef3f1" : "")}>
-              {sec.h && <h3 className="disp" style={sx("font-size:19px;font-weight:800;color:#14332f;margin-bottom:10px")}>{sec.h}</h3>}
-              {sec.body.map((b, bi) =>
-                b.startsWith("• ") ? (
-                  <div key={bi} style={sx("display:flex;gap:10px;margin-top:7px")}>
-                    <span style={sx("flex:none;margin-top:9px;width:7px;height:7px;border-radius:50%;background:#14b8a6")} />
-                    <span style={sx("font-size:15.5px;line-height:1.55;color:#3f524e")}>{b.slice(2)}</span>
-                  </div>
-                ) : (
-                  <p key={bi} style={sx("margin:7px 0 0;font-size:15.5px;line-height:1.6;color:#3f524e;text-wrap:pretty")}>{b}</p>
-                ),
-              )}
-            </div>
-          ))}
-        </div>
+        {/* опис уроку: CLI-курси — блоковий рендер з підсвіткою; решта — звичайна теорія */}
+        {al.commandQuiz ? (
+          <LessonContent lesson={al} accent={am.color} />
+        ) : (
+          <div style={sx("border-radius:26px;background:#fff;padding:26px 28px;margin-bottom:22px;box-shadow:0 16px 36px -22px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 11px rgba(255,255,255,.9)")}>
+            {al.sections.map((sec, si) => (
+              <div key={si} style={sx(si > 0 ? "margin-top:22px;padding-top:22px;border-top:1px solid #eef3f1" : "")}>
+                {sec.h && <h3 className="disp" style={sx("font-size:19px;font-weight:800;color:#14332f;margin-bottom:10px")}>{sec.h}</h3>}
+                {sec.body.map((b, bi) =>
+                  b.startsWith("• ") ? (
+                    <div key={bi} style={sx("display:flex;gap:10px;margin-top:7px")}>
+                      <span style={sx("flex:none;margin-top:9px;width:7px;height:7px;border-radius:50%;background:#14b8a6")} />
+                      <span style={sx("font-size:15.5px;line-height:1.55;color:#3f524e")}>{b.slice(2)}</span>
+                    </div>
+                  ) : (
+                    <p key={bi} style={sx("margin:7px 0 0;font-size:15.5px;line-height:1.6;color:#3f524e;text-wrap:pretty")}>{b}</p>
+                  ),
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* заклик до практики: CLI-уроки → вкладка CLI, решта → Пісочниця */}
         <div style={sx("display:flex;align-items:center;gap:16px;padding:20px 24px;border-radius:24px;background:linear-gradient(120deg,#0f2a27,#14413a);color:#eafaf7;box-shadow:0 20px 44px -20px rgba(17,74,68,.5)")}>
