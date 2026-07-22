@@ -6,6 +6,7 @@ import { Clay, Icon } from "./ui";
 import { AudioPlayer } from "./AudioPlayer";
 import { SandboxPanel } from "./sandbox/SandboxPanel";
 import { CliPanel } from "./cli/CliPanel";
+import { LessonContent } from "./LessonContent";
 import { GitEngine } from "@/lib/git-engine/store";
 import { loadWorkspace } from "@/lib/git-engine/persistence";
 import { createSeedWorkspace } from "@/lib/git-engine/seed";
@@ -260,9 +261,16 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
   const cmdCheck = () => {
     if (s.cmdChecked) return;
     const q = activeLesson.commandQuiz?.[s.quizIndex];
-    if (!q || !s.cmdInput.trim()) return;
+    if (!q || !q.accept || !s.cmdInput.trim()) return;
     const ok = matchesAccept(s.cmdInput, q.accept);
     set({ cmdChecked: true, cmdOk: ok, correct: s.correct + (ok ? 1 : 0) });
+  };
+  // Питання з вибором відповіді (легший режим): клік по варіанту.
+  const cmdMcqPick = (oi: number) => {
+    if (s.answered) return;
+    const q = activeLesson.commandQuiz?.[s.quizIndex];
+    if (!q || q.correct == null) return;
+    set({ selected: oi, answered: true, correct: s.correct + (oi === q.correct ? 1 : 0) });
   };
   const quizNext = () => {
     const total = quizCount(activeLesson);
@@ -753,33 +761,15 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
         </div>
         <h1 className="disp" style={sx("font-size:32px;font-weight:800;letter-spacing:-.7px;margin-bottom:20px")}>{al.title}</h1>
 
-        {/* video (без звуку) */}
-        {al.video ? (
+        {/* video — показуємо плеєр лише коли відео є (для CLI-уроків його поки нема) */}
+        {al.video && (
           <div style={sx("width:100%;aspect-ratio:16/9;border-radius:26px;overflow:hidden;margin-bottom:22px;background:#0f2a27;box-shadow:0 18px 40px -18px rgba(17,74,68,.35),inset 0 0 0 1px rgba(17,74,68,.05)")}>
             <video src={al.video} controls playsInline preload="metadata" style={{ width: "100%", height: "100%", display: "block", objectFit: "cover" }} />
           </div>
-        ) : (
-          al.commandQuiz && (
-            <div style={sx("width:100%;aspect-ratio:16/9;border-radius:26px;margin-bottom:22px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;background:#eef3f1;color:#8b9c97;box-shadow:inset 0 0 0 2px rgba(17,74,68,.08)")}>
-              <Icon name="fa-solid fa-film" style={sx("font-size:34px")} />
-              <span style={sx("font-weight:800;font-size:15px")}>Відео-слот</span>
-              <span style={sx("font-size:13px")}>Відео до уроку буде додано</span>
-            </div>
-          )
         )}
 
         {/* окрема озвучка уроку */}
-        {al.audio ? (
-          <AudioPlayer src={al.audio} />
-        ) : (
-          al.commandQuiz && (
-            <div style={sx("display:flex;align-items:center;gap:12px;padding:16px 20px;border-radius:20px;margin-bottom:0;background:#f5f8f7;color:#8b9c97;box-shadow:inset 0 0 0 2px rgba(17,74,68,.06)")}>
-              <Icon name="fa-solid fa-headphones" style={sx("font-size:20px")} />
-              <span style={sx("font-weight:800;font-size:14px")}>Аудіо-слот</span>
-              <span style={sx("font-size:13px")}>Озвучку уроку буде додано</span>
-            </div>
-          )
-        )}
+        {al.audio && <AudioPlayer src={al.audio} />}
 
         {/* analogy — лише для класичних уроків (CLI-курси дають опис у теорії) */}
         {!al.commandQuiz && (
@@ -794,24 +784,28 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
           </div>
         )}
 
-        {/* theory / опис уроку */}
-        <div style={sx("border-radius:26px;background:#fff;padding:26px 28px;margin-bottom:22px;box-shadow:0 16px 36px -22px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 11px rgba(255,255,255,.9)")}>
-          {al.sections.map((sec, si) => (
-            <div key={si} style={sx(si > 0 ? "margin-top:22px;padding-top:22px;border-top:1px solid #eef3f1" : "")}>
-              {sec.h && <h3 className="disp" style={sx("font-size:19px;font-weight:800;color:#14332f;margin-bottom:10px")}>{sec.h}</h3>}
-              {sec.body.map((b, bi) =>
-                b.startsWith("• ") ? (
-                  <div key={bi} style={sx("display:flex;gap:10px;margin-top:7px")}>
-                    <span style={sx("flex:none;margin-top:9px;width:7px;height:7px;border-radius:50%;background:#14b8a6")} />
-                    <span style={sx("font-size:15.5px;line-height:1.55;color:#3f524e")}>{b.slice(2)}</span>
-                  </div>
-                ) : (
-                  <p key={bi} style={sx("margin:7px 0 0;font-size:15.5px;line-height:1.6;color:#3f524e;text-wrap:pretty")}>{b}</p>
-                ),
-              )}
-            </div>
-          ))}
-        </div>
+        {/* опис уроку: CLI-курси — блоковий рендер з підсвіткою; решта — звичайна теорія */}
+        {al.commandQuiz ? (
+          <LessonContent lesson={al} accent={am.color} />
+        ) : (
+          <div style={sx("border-radius:26px;background:#fff;padding:26px 28px;margin-bottom:22px;box-shadow:0 16px 36px -22px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 11px rgba(255,255,255,.9)")}>
+            {al.sections.map((sec, si) => (
+              <div key={si} style={sx(si > 0 ? "margin-top:22px;padding-top:22px;border-top:1px solid #eef3f1" : "")}>
+                {sec.h && <h3 className="disp" style={sx("font-size:19px;font-weight:800;color:#14332f;margin-bottom:10px")}>{sec.h}</h3>}
+                {sec.body.map((b, bi) =>
+                  b.startsWith("• ") ? (
+                    <div key={bi} style={sx("display:flex;gap:10px;margin-top:7px")}>
+                      <span style={sx("flex:none;margin-top:9px;width:7px;height:7px;border-radius:50%;background:#14b8a6")} />
+                      <span style={sx("font-size:15.5px;line-height:1.55;color:#3f524e")}>{b.slice(2)}</span>
+                    </div>
+                  ) : (
+                    <p key={bi} style={sx("margin:7px 0 0;font-size:15.5px;line-height:1.6;color:#3f524e;text-wrap:pretty")}>{b}</p>
+                  ),
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* заклик до практики: CLI-уроки → вкладка CLI, решта → Пісочниця */}
         <div style={sx("display:flex;align-items:center;gap:16px;padding:20px 24px;border-radius:24px;background:linear-gradient(120deg,#0f2a27,#14413a);color:#eafaf7;box-shadow:0 20px 44px -20px rgba(17,74,68,.5)")}>
@@ -841,10 +835,66 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
   };
 
   // ---------- quiz ----------
-  // Питання командного квізу: сценарій + поле для введення команди.
+  // Питання командного квізу: вибір відповіді АБО введення команди.
   const CommandQuestion = () => {
     const cq = activeLesson.commandQuiz!;
     const q = cq[s.quizIndex];
+    const nextLabel = s.quizIndex + 1 >= cq.length ? "Завершити урок" : "Наступне питання";
+
+    // ── режим вибору відповіді (легший) ──
+    if (q.options) {
+      const wasCorrect = s.selected === q.correct;
+      return (
+        <>
+          <h1 className="disp" style={sx("font-size:24px;font-weight:800;letter-spacing:-.4px;margin-bottom:8px;line-height:1.3;text-wrap:pretty")}>{q.scenario}</h1>
+          <p style={sx("margin:0 0 18px;color:#8b9c97;font-size:14px;font-weight:600")}>
+            <Icon name="fa-solid fa-list-check" /> Оберіть правильну команду
+          </p>
+          <div style={sx("display:flex;flex-direction:column;gap:12px")}>
+            {q.options.map((label, oi) => {
+              const isSel = s.selected === oi;
+              const isCor = oi === q.correct;
+              let st = "display:flex;align-items:center;gap:14px;text-align:left;padding:15px 18px;border:none;border-radius:16px;font-family:ui-monospace,Menlo,monospace;font-weight:700;font-size:15px;transition:all .18s;background:#fff;";
+              let badge = "display:grid;place-items:center;flex:none;width:30px;height:30px;border-radius:9px;font-weight:800;font-size:13px;font-family:Nunito,sans-serif;";
+              if (!s.answered) {
+                st += "cursor:pointer;color:#14332f;box-shadow:inset 0 -4px 8px rgba(17,74,68,.045),inset 0 4px 7px rgba(255,255,255,.9),0 8px 18px -11px rgba(17,74,68,.2);";
+                badge += "background:#eef3f1;color:#5b6d68;";
+              } else if (isCor) {
+                st += "cursor:default;color:#0d7d70;background:#e5f8f3;box-shadow:inset 0 0 0 2px #14b8a6;";
+                badge += "background:#14b8a6;color:#fff;";
+              } else if (isSel) {
+                st += "cursor:default;color:#c0392b;background:#fdecea;box-shadow:inset 0 0 0 2px #e57373;";
+                badge += "background:#e57373;color:#fff;";
+              } else {
+                st += "cursor:default;color:#9aaba6;opacity:.6;";
+                badge += "background:#eef3f1;color:#9aaba6;";
+              }
+              return (
+                <button key={oi} onClick={() => cmdMcqPick(oi)} style={sx(st)}>
+                  <span style={sx(badge)}>{String.fromCharCode(65 + oi)}</span>
+                  <span style={sx("flex:1")}>{label}</span>
+                  {s.answered && isCor && <Icon name="fa-solid fa-check" style={sx("color:#14b8a6")} />}
+                  {s.answered && isSel && !isCor && <Icon name="fa-solid fa-xmark" style={sx("color:#e57373")} />}
+                </button>
+              );
+            })}
+          </div>
+          {s.answered && (
+            <>
+              <div style={sx("display:flex;align-items:flex-start;gap:10px;margin-top:16px;padding:14px 18px;border-radius:16px;font-weight:700;font-size:14.5px;line-height:1.5;" + (wasCorrect ? "background:#e5f8f3;color:#0d7d70;" : "background:#fdecea;color:#c0392b;"))}>
+                <Icon name={wasCorrect ? "fa-solid fa-circle-check" : "fa-solid fa-circle-info"} />{" "}
+                <span>{(wasCorrect ? "Правильно! " : "Не зовсім. ") + q.explanation}</span>
+              </div>
+              <button onClick={quizNext} style={sx("display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-top:16px;padding:16px;border:none;cursor:pointer;border-radius:18px;font-weight:800;font-size:16px;color:#fff;background:#14b8a6;box-shadow:0 14px 26px -10px rgba(20,184,166,.6),inset 0 -5px 10px rgba(6,95,85,.4),inset 0 5px 9px rgba(255,255,255,.32)")}>
+                {nextLabel} <Icon name="fa-solid fa-arrow-right" />
+              </button>
+            </>
+          )}
+        </>
+      );
+    }
+
+    // ── режим введення команди ──
     const inpStyle = s.cmdChecked
       ? s.cmdOk
         ? "width:100%;font-family:ui-monospace,Menlo,monospace;font-size:17px;font-weight:700;padding:15px 18px;border:none;border-radius:14px;background:#0f2a27;color:#7ee6d3;box-shadow:inset 0 0 0 2px #14b8a6;outline:none"

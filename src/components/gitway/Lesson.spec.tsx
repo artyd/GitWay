@@ -25,34 +25,42 @@ function openFirstClaudeLesson() {
 }
 
 describe("CLI-урок: реальний контент + командний квіз", () => {
-  it("показує аудіо, опис і слот відео, потім веде до тесту", () => {
+  it("показує опис і аудіо, без порожнього відео-слоту, потім веде до тесту", () => {
     openFirstClaudeLesson();
     // на сторінці уроку є номер у межах курсу
     expect(screen.getByText(/Урок 1 з 12/)).toBeTruthy();
     // реальний опис із файлу
     expect(screen.getByText(/інструмент від компанії/)).toBeTruthy();
-    // слот відео (реального mp4 ще нема)
-    expect(screen.getByText("Відео-слот")).toBeTruthy();
+    // порожнього відео-слоту немає (відео поки не додано)
+    expect(screen.queryByText("Відео-слот")).toBeNull();
+    // блоковий рендер: зведення команд уроку + інлайн-підсвітка тієї ж команди в тексті
+    expect(screen.getByText("Команди цього уроку")).toBeTruthy();
+    expect(screen.getAllByText(/claude auth login/).length).toBeGreaterThanOrEqual(2);
     // кнопка переходу до тесту
     expect(screen.getByText(/пройти квіз/)).toBeTruthy();
   });
 
-  it("командний квіз приймає правильну команду і показує пояснення", () => {
+  it("змішаний квіз: перше питання — вибір відповіді, правильний варіант зараховується", () => {
     openFirstClaudeLesson();
     fireEvent.click(screen.getByText(/пройти квіз/)); // startQuiz
-    const inp = screen.getByLabelText("Поле введення команди") as HTMLInputElement;
-    fireEvent.change(inp, { target: { value: "curl -fsSL https://claude.ai/install.sh | bash" } });
-    fireEvent.click(screen.getByText(/Перевірити/));
+    // питання 1 — з вибором
+    expect(screen.getByText(/Оберіть правильну команду/)).toBeTruthy();
+    // клікаємо правильний варіант (офіційний install-скрипт)
+    fireEvent.click(screen.getByText(/curl -fsSL https:\/\/claude\.ai\/install\.sh/));
     expect(screen.getByText(/Правильно!/)).toBeTruthy();
     expect(screen.getByText(/нативний інсталятор/)).toBeTruthy(); // пояснення з файлу
   });
 
-  it("невірна команда позначається як неправильна, але показує пояснення", () => {
+  it("змішаний квіз: друге питання — з введенням команди", () => {
     openFirstClaudeLesson();
     fireEvent.click(screen.getByText(/пройти квіз/));
+    // відповідаємо на питання 1 (вибір) і переходимо далі
+    fireEvent.click(screen.getByText(/curl -fsSL https:\/\/claude\.ai\/install\.sh/));
+    fireEvent.click(screen.getByText(/Наступне питання/));
+    // питання 2 — введення команди (Homebrew)
     const inp = screen.getByLabelText("Поле введення команди") as HTMLInputElement;
-    fireEvent.change(inp, { target: { value: "git init" } });
+    fireEvent.change(inp, { target: { value: "brew install --cask claude-code" } });
     fireEvent.click(screen.getByText(/Перевірити/));
-    expect(screen.getByText(/Не зовсім/)).toBeTruthy();
+    expect(screen.getByText(/Правильно!/)).toBeTruthy();
   });
 });
