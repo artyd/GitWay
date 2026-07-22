@@ -1,0 +1,3 @@
+# Аудіо CLI-курсів копіюється сюди render-cli.mjs із ../public/audio — не трекаємо.
+public/audio/claude-*.mp3
+public/audio/codex-*.mp3

@@ -30,6 +30,8 @@ export const PHASES: Record<number, { name: string; sub: string; color: string }
   1: { name: "Основи Git", sub: "ЛОКАЛЬНА РОБОТА", color: C.teal },
   2: { name: "GitHub і команда", sub: "СПІЛЬНА РОБОТА", color: C.blue },
   3: { name: "AI-агенти", sub: "АВТОМАТИЗАЦІЯ", color: C.purple },
+  4: { name: "Claude Code CLI", sub: "AI-АГЕНТ У ТЕРМІНАЛІ", color: C.purple },
+  5: { name: "OpenAI Codex CLI", sub: "AI-АГЕНТ У ТЕРМІНАЛІ", color: "#d98b3d" },
 };
 
 export const useEnter = (delay = 0, damping = 200) => {
