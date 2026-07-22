@@ -26,13 +26,17 @@ import { matchesAccept } from "@/lib/content/matchCommand";
 type Screen = "login" | "roadmap" | "trainer" | "sandbox" | "cli" | "lesson" | "quiz" | "progress";
 type TrMode = "cards" | "spell" | "ref";
 
-// 5 акаунтів-відділів. Прогрес кожного зберігається окремо (localStorage).
+// 9 акаунтів-відділів. Прогрес кожного зберігається окремо (localStorage).
 type Account = { key: string; name: string; role: string; initials: string; color: string; icon: string };
 
 const ACCOUNTS: Account[] = [
   { key: "zakupivli", name: "Відділ закупівель", role: "Постачання та закупівлі", icon: "fa-solid fa-cart-shopping", color: "#e6a15a", initials: "ВЗ" },
   { key: "prodazhi", name: "Відділ продажів", role: "Продажі та клієнти", icon: "fa-solid fa-handshake", color: "#14b8a6", initials: "ВП" },
   { key: "it", name: "Відділ ІТ", role: "Технічний відділ", icon: "fa-solid fa-laptop-code", color: "#7c6ee0", initials: "ІТ" },
+  { key: "finance", name: "Фінансовий відділ", role: "Фінанси та бюджет", icon: "fa-solid fa-coins", color: "#3fae7a", initials: "ФВ" },
+  { key: "legal", name: "Юридичний відділ", role: "Право та договори", icon: "fa-solid fa-scale-balanced", color: "#5b76c9", initials: "ЮВ" },
+  { key: "equipment", name: "Відділ обладнання", role: "Техніка та обладнання", icon: "fa-solid fa-screwdriver-wrench", color: "#b5793a", initials: "ВО" },
+  { key: "hr", name: "Відділ персоналу", role: "Кадри та персонал", icon: "fa-solid fa-users", color: "#cf6a9c", initials: "Пе" },
   { key: "director", name: "Директор", role: "Керівництво", icon: "fa-solid fa-user-tie", color: "#e0a03e", initials: "Ди" },
   { key: "test", name: "Тест", role: "Тестовий акаунт", icon: "fa-solid fa-flask", color: "#8fb8d9", initials: "Те" },
 ];
@@ -346,20 +350,21 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
       <p style={sx("font-size:19px;color:#5b6d68;margin:0 0 36px;max-width:560px;text-align:center;text-wrap:pretty")}>
         Оберіть, під яким відділом увійти — прогрес кожного акаунта зберігається окремо.
       </p>
-      <div style={sx("display:flex;flex-wrap:wrap;justify-content:center;gap:18px;width:100%;max-width:730px")}>
+      {/* 9 відділів у сітці 5 + 4 (на вузьких екранах перенос адаптивний) */}
+      <div style={sx("display:flex;flex-wrap:wrap;justify-content:center;gap:16px;width:100%;max-width:960px")}>
         {ACCOUNTS.map((acc) => (
           <Clay
             key={acc.key}
             onClick={() => selectAccount(acc)}
-            base="display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center;width:222px;padding:26px 20px;border:none;cursor:pointer;border-radius:26px;background:#fff;transition:transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .18s ease;box-shadow:0 16px 32px -18px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 12px rgba(255,255,255,.9)"
+            base="display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;width:178px;padding:22px 16px;border:none;cursor:pointer;border-radius:24px;background:#fff;transition:transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .18s ease;box-shadow:0 16px 32px -18px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 12px rgba(255,255,255,.9)"
             hover="transform:translateY(-5px);box-shadow:0 26px 40px -18px rgba(17,74,68,.35),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 12px rgba(255,255,255,.9)"
           >
-            <span style={sx(`display:grid;place-items:center;width:70px;height:70px;border-radius:22px;color:#fff;font-size:30px;background:${acc.color};box-shadow:0 12px 22px -8px ${acc.color}cc,inset 0 -4px 8px rgba(0,0,0,.15),inset 0 5px 9px rgba(255,255,255,.35)`)}>
+            <span style={sx(`display:grid;place-items:center;width:64px;height:64px;border-radius:20px;color:#fff;font-size:27px;background:${acc.color};box-shadow:0 12px 22px -8px ${acc.color}cc,inset 0 -4px 8px rgba(0,0,0,.15),inset 0 5px 9px rgba(255,255,255,.35)`)}>
               <Icon name={acc.icon} />
             </span>
             <span style={sx("display:flex;flex-direction:column;gap:3px")}>
-              <span style={sx("font-weight:800;font-size:17px;color:#14332f")}>{acc.name}</span>
-              <span style={sx("font-size:12.5px;color:#8b9c97;font-weight:600;line-height:1.3")}>{acc.role}</span>
+              <span style={sx("font-weight:800;font-size:15.5px;color:#14332f")}>{acc.name}</span>
+              <span style={sx("font-size:12px;color:#8b9c97;font-weight:600;line-height:1.3")}>{acc.role}</span>
             </span>
           </Clay>
         ))}
