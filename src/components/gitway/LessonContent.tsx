@@ -15,11 +15,13 @@ export function LessonContent({ lesson, accent }: { lesson: Lesson; accent: stri
   const lead = paras[0] ?? "";
   const rest = paras.slice(1);
 
-  // Команди цього уроку (з квізу): літеральні відповіді + пояснення.
+  // Команди цього уроку (з квізу): з accept-літерала або з обраного варіанта.
   const cmds = (lesson.commandQuiz ?? [])
     .map((q) => {
-      const lit = q.accept.find((a) => a.kind === "literal");
-      return lit ? { cmd: lit.value, desc: q.explanation } : null;
+      const lit = q.accept?.find((a) => a.kind === "literal")?.value;
+      const opt = q.options && q.correct != null ? q.options[q.correct] : undefined;
+      const cmd = lit ?? opt;
+      return cmd ? { cmd, desc: q.explanation } : null;
     })
     .filter((x): x is { cmd: string; desc: string } => !!x);
 

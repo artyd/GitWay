@@ -29,9 +29,16 @@ describe("завантаження курсів у LESSONS", () => {
       for (const q of l.commandQuiz!) {
         expect(q.scenario).toBeTruthy();
         expect(q.explanation).toBeTruthy();
-        expect(q.accept.length).toBeGreaterThan(0);
+        // вибір обовʼязковий: options (>=2) + коректний correct
+        expect(Array.isArray(q.options) && q.options!.length >= 2).toBe(true);
+        expect(typeof q.correct === "number" && q.correct! >= 0 && q.correct! < q.options!.length).toBe(true);
+        // ввід — додатковий спосіб (є у наших уроках)
+        if (q.accept) expect(q.accept.length).toBeGreaterThan(0);
       }
     }
+    // усі CLI-питання мають і вибір, і додатковий ввід
+    const cli = LESSONS.filter((x) => x.phase >= 4);
+    expect(cli.every((l) => l.commandQuiz!.every((q) => q.options && q.accept))).toBe(true);
   });
 
   it("базові 11 уроків лишились MCQ (без commandQuiz)", () => {
@@ -56,6 +63,8 @@ describe("валідація контенту падає гучно", () => {
       sandbox: { title: "s", intro: "i", steps: [{ do: "x", res: "y" }] },
       commandQuiz: Array.from({ length: 5 }, () => ({
         scenario: "s",
+        options: ["git init", "git status", "ls", "cd"],
+        correct: 0,
         accept: [{ kind: "literal" as const, value: "git init" }],
         explanation: "e",
       })),
@@ -115,7 +124,7 @@ describe("уніфікований каталог", () => {
   it("усі cmd-посилання квізів існують у каталозі", () => {
     for (const l of LESSONS) {
       for (const q of l.commandQuiz ?? []) {
-        for (const a of q.accept) {
+        for (const a of q.accept ?? []) {
           if (a.kind === "cmd") expect(CATALOG_IDS.has(a.id)).toBe(true);
         }
       }
