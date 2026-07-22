@@ -84,7 +84,8 @@
           "explanation": "Простий запуск команди claude в директорії проєкту відкриває інтерактивну сесію з доступом до файлів цієї папки.",
           "hint": "claude"
         }
-      ]
+      ],
+      "video": "/videos/claude-01.mp4"
     },
     {
       "icon": "fa-solid fa-comments",
