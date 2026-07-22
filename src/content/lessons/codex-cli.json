@@ -230,7 +230,8 @@
             }
           ]
         }
-      ]
+      ],
+      "video": "/videos/codex-02.mp4"
     },
     {
       "icon": "fa-solid fa-folder-open",
@@ -344,7 +345,8 @@
             }
           ]
         }
-      ]
+      ],
+      "video": "/videos/codex-03.mp4"
     },
     {
       "icon": "fa-solid fa-file-lines",
