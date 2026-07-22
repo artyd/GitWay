@@ -854,7 +854,8 @@
           "explanation": "Перевірка поточного статусу авторизації — обов'язковий крок перед claude marketplace publish.",
           "hint": "claude"
         }
-      ]
+      ],
+      "video": "/videos/claude-10.mp4"
     },
     {
       "icon": "fa-solid fa-gears",
@@ -937,7 +938,8 @@
           "explanation": "У headless-режимі нема кому зупинити агента вручну, тому чіткі правила в CLAUDE.md критично важливі.",
           "hint": "CLAUDE.md"
         }
-      ]
+      ],
+      "video": "/videos/claude-11.mp4"
     },
     {
       "icon": "fa-solid fa-flag-checkered",
@@ -1025,7 +1027,8 @@
           "explanation": "Обидва інструменти відкочують останні кроки агента, повертаючи проєкт у попередній стан.",
           "hint": "/rewind"
         }
-      ]
+      ],
+      "video": "/videos/claude-12.mp4"
     }
   ]
 }
