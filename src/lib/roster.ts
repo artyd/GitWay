@@ -10,10 +10,10 @@ export const DEPARTMENTS: Department[] = [
   { key: "logistyka", name: "Логістика", icon: "fa-solid fa-truck", color: "#3aa6c4" },
   { key: "prodazhi", name: "Продажі", icon: "fa-solid fa-handshake", color: "#14b8a6" },
   { key: "finance", name: "Бухгалтерія / Фінанси", icon: "fa-solid fa-coins", color: "#3fae7a" },
-  { key: "hr_it", name: "HR / ІТ", icon: "fa-solid fa-users-gear", color: "#cf6a9c" },
-  { key: "admin", name: "Адміністрація", icon: "fa-solid fa-user-tie", color: "#e0a03e" },
-  { key: "legal", name: "Юридичний", icon: "fa-solid fa-scale-balanced", color: "#5b76c9" },
+  { key: "hr", name: "HR", icon: "fa-solid fa-users", color: "#cf6a9c" },
   { key: "it", name: "ІТ", icon: "fa-solid fa-laptop-code", color: "#7c6ee0" },
+  { key: "legal", name: "Юридичний", icon: "fa-solid fa-scale-balanced", color: "#5b76c9" },
+  { key: "director", name: "Директор", icon: "fa-solid fa-user-tie", color: "#e0a03e" },
 ];
 
 // Список учасників. Порядок у межах відділу — як у наданому переліку.
@@ -46,15 +46,15 @@ export const PEOPLE: Person[] = [
   { name: "Ковтун Анна", deptKey: "finance" },
   { name: "Шевченко Татьяна", deptKey: "finance" },
 
-  { name: "Тахтаулова Алина", deptKey: "hr_it" },
-  { name: "Шульгина Юлия", deptKey: "hr_it" },
-  { name: "Горпинко Сергей", deptKey: "hr_it" },
+  { name: "Тахтаулова Алина", deptKey: "hr" },
 
-  { name: "Мороз Ольга Валентиновна", deptKey: "admin" },
+  { name: "Зубар Руслан", deptKey: "it" },
+  { name: "Шульгина Юлия", deptKey: "it" },
+  { name: "Горпинко Сергей", deptKey: "it" },
 
   { name: "Верещагина Виктория", deptKey: "legal" },
 
-  { name: "Зубар Руслан", deptKey: "it" },
+  { name: "Мороз Ольга Валентиновна", deptKey: "director" },
 ];
 
 const DEPT_BY_KEY = new Map(DEPARTMENTS.map((d) => [d.key, d]));
