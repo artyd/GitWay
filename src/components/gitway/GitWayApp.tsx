@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { sx } from "@/lib/sx";
 import { Clay, Icon } from "./ui";
 import { AudioPlayer } from "./AudioPlayer";
@@ -23,44 +23,50 @@ import {
   type Lesson,
 } from "@/lib/gitway-data";
 import { matchesAccept } from "@/lib/content/matchCommand";
+import { DEPARTMENTS, PEOPLE, peopleByDept, toAccount, type RosterAccount } from "@/lib/roster";
 
 type Screen = "login" | "roadmap" | "trainer" | "sandbox" | "cli" | "lesson" | "quiz" | "progress";
 type TrMode = "cards" | "spell" | "ref";
 
-// 9 акаунтів-відділів. Прогрес кожного зберігається окремо (localStorage).
-type Account = { key: string; name: string; role: string; initials: string; color: string; icon: string };
-
-const ACCOUNTS: Account[] = [
-  { key: "zakupivli", name: "Відділ закупівель", role: "Постачання та закупівлі", icon: "fa-solid fa-cart-shopping", color: "#e6a15a", initials: "ВЗ" },
-  { key: "prodazhi", name: "Відділ продажів", role: "Продажі та клієнти", icon: "fa-solid fa-handshake", color: "#14b8a6", initials: "ВП" },
-  { key: "it", name: "Відділ ІТ", role: "Технічний відділ", icon: "fa-solid fa-laptop-code", color: "#7c6ee0", initials: "ІТ" },
-  { key: "finance", name: "Фінансовий відділ", role: "Фінанси та бюджет", icon: "fa-solid fa-coins", color: "#3fae7a", initials: "ФВ" },
-  { key: "legal", name: "Юридичний відділ", role: "Право та договори", icon: "fa-solid fa-scale-balanced", color: "#5b76c9", initials: "ЮВ" },
-  { key: "equipment", name: "Відділ обладнання", role: "Техніка та обладнання", icon: "fa-solid fa-screwdriver-wrench", color: "#b5793a", initials: "ВО" },
-  { key: "hr", name: "Відділ персоналу", role: "Кадри та персонал", icon: "fa-solid fa-users", color: "#cf6a9c", initials: "Пе" },
-  { key: "director", name: "Директор", role: "Керівництво", icon: "fa-solid fa-user-tie", color: "#e0a03e", initials: "Ди" },
-  { key: "test", name: "Тест", role: "Тестовий акаунт", icon: "fa-solid fa-flask", color: "#8fb8d9", initials: "Те" },
-];
+// Учасники беруться з роестру (відділи + ПІБ). Вхід — відділ, потім ПІБ.
+// Прогрес кожного зберігається на сервері (спільний рейтинг по відділах).
+type Account = RosterAccount;
+const FALLBACK_ACCOUNT: Account = toAccount(PEOPLE[0]);
 
 type SavedProgress = { completed: number[]; current: number; xp: number; streak: number; trKnown: string[] };
-const STORAGE_PREFIX = "gitway:progress:v1:";
-const loadProgress = (key: string): SavedProgress | null => {
-  if (typeof window === "undefined") return null;
+
+// Прогрес — на сервері (спільна БД). Локально нічого не тримаємо, щоб рейтинг був єдиним.
+async function fetchProgress(userId: string): Promise<SavedProgress | null> {
   try {
-    const raw = window.localStorage.getItem(STORAGE_PREFIX + key);
-    return raw ? (JSON.parse(raw) as SavedProgress) : null;
+    const r = await fetch(`/api/progress?user=${encodeURIComponent(userId)}`, { cache: "no-store" });
+    if (!r.ok) return null;
+    const p = (await r.json()).progress;
+    if (!p) return null;
+    return {
+      completed: p.completed ?? [],
+      current: p.current ?? 1,
+      xp: p.xp ?? 0,
+      streak: p.streak ?? 0,
+      trKnown: p.trKnown ?? [],
+    };
   } catch {
     return null;
   }
-};
-const saveProgress = (key: string, data: SavedProgress) => {
-  if (typeof window === "undefined") return;
+}
+async function postProgress(acc: Account, data: SavedProgress): Promise<void> {
   try {
-    window.localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(data));
+    await fetch("/api/progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: acc.id, name: acc.name, department: acc.department, deptKey: acc.deptKey, ...data }),
+    });
   } catch {
-    /* ignore */
+    /* не блокуємо UI, якщо сервер тимчасово недоступний */
   }
-};
+}
+
+// Рядок рейтингу з /api/leaderboard.
+type LbRow = { id: string; name: string; department: string; deptKey: string; xp: number; initials: string; color: string; icon: string; rank: number };
 type State = {
   screen: Screen;
   user: Account | null;
@@ -134,11 +140,42 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
   // Git-рушій пісочниці. Один екземпляр на акаунт, спільний для терміналу й GitHub-UI.
   const [engine, setEngine] = useState<GitEngine | null>(null);
 
-  // Автозбереження прогресу поточного акаунта в localStorage.
+  // Вибір відділу на екрані входу (крок 1 → крок 2 = вибір ПІБ).
+  const [loginDept, setLoginDept] = useState<string | null>(null);
+
+  // Стан рейтингу (з сервера) + фільтри.
+  const [lbRows, setLbRows] = useState<LbRow[]>([]);
+  const [lbDept, setLbDept] = useState<string>(""); // "" = топ-10 без фільтра
+  const [lbSort, setLbSort] = useState<"xp" | "name">("xp");
+  const [myRank, setMyRank] = useState<number | null>(null);
+  const [lbLoading, setLbLoading] = useState(false);
+
+  // Поки не підтягнули прогрес із сервера — не зберігаємо (щоб не затерти нулями).
+  const hydratedRef = useRef(false);
+
+  // Автозбереження прогресу поточного акаунта на сервер (з невеликою затримкою).
   useEffect(() => {
-    if (!s.user) return;
-    saveProgress(s.user.key, { completed: s.completed, current: s.current, xp: s.xp, streak: s.streak, trKnown: s.trKnown });
+    if (!s.user || !hydratedRef.current) return;
+    const acc = s.user;
+    const data = { completed: s.completed, current: s.current, xp: s.xp, streak: s.streak, trKnown: s.trKnown };
+    const t = setTimeout(() => postProgress(acc, data), 600);
+    return () => clearTimeout(t);
   }, [s.user, s.completed, s.current, s.xp, s.streak, s.trKnown]);
+
+  // Завантаження рейтингу, коли відкрито екран прогресу або змінено фільтри.
+  useEffect(() => {
+    if (s.screen !== "progress" || !s.user) return;
+    let alive = true;
+    setLbLoading(true);
+    const params = new URLSearchParams({ sort: lbSort, me: s.user.id, limit: "10" });
+    if (lbDept) params.set("department", lbDept);
+    fetch(`/api/leaderboard?${params.toString()}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (!alive) return; setLbRows(j.rows ?? []); setMyRank(j.myRank ?? null); })
+      .catch(() => { if (alive) setLbRows([]); })
+      .finally(() => { if (alive) setLbLoading(false); });
+    return () => { alive = false; };
+  }, [s.screen, s.user, lbDept, lbSort, s.xp]);
 
   // ---------- navigation ----------
   const go = (screen: Screen) => {
@@ -146,18 +183,17 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
     scrollTop();
   };
   const selectAccount = (acc: Account) => {
-    // Вантажимо збережений прогрес акаунта або чистий старт.
-    const saved = loadProgress(acc.key);
-    const base: SavedProgress = saved ?? { completed: [], current: 1, xp: 0, streak: 0, trKnown: [] };
+    // Входимо одразу з чистим станом; збережений прогрес підтягнемо з сервера нижче.
+    hydratedRef.current = false;
     set({
       user: acc,
       screen: "roadmap",
-      completed: base.completed,
-      current: base.current,
-      activeId: base.current,
-      xp: base.xp,
-      streak: base.streak,
-      trKnown: base.trKnown,
+      completed: [],
+      current: 1,
+      activeId: 1,
+      xp: 0,
+      streak: 0,
+      trKnown: [],
       // скидаємо тимчасовий стан
       quizIndex: 0,
       selected: null,
@@ -176,12 +212,28 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
       spellChecked: false,
       spellOk: false,
     });
-    // Створюємо/завантажуємо рушій пісочниці для цього акаунта.
-    const ws = loadWorkspace(acc.key) ?? createSeedWorkspace(acc.key, Date.now);
+    // Створюємо/завантажуємо рушій пісочниці для цього акаунта (локально).
+    const ws = loadWorkspace(acc.id) ?? createSeedWorkspace(acc.id, Date.now);
     setEngine(new GitEngine(ws, Date.now));
     scrollTop();
+    // Підтягуємо збережений прогрес із сервера і лише тоді дозволяємо автозбереження.
+    fetchProgress(acc.id).then((saved) => {
+      if (saved) {
+        set({
+          completed: saved.completed,
+          current: saved.current,
+          activeId: saved.current,
+          xp: saved.xp,
+          streak: saved.streak,
+          trKnown: saved.trKnown,
+        });
+      }
+      hydratedRef.current = true;
+    });
   };
   const logout = () => {
+    hydratedRef.current = false;
+    setLoginDept(null);
     set({ screen: "login", user: null });
     setEngine(null);
     scrollTop();
@@ -292,7 +344,7 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
   };
 
   // ================= derived =================
-  const user = s.user ?? ACCOUNTS[0];
+  const user = s.user ?? FALLBACK_ACCOUNT;
   const userFirst = user.name.split(" ")[0];
   const doneCount = s.completed.length;
   const progressPct = Math.round((doneCount / TOTAL_LESSONS) * 100);
@@ -349,35 +401,71 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
       </header>
     );
 
-  // ---------- login: вибір акаунта-відділу ----------
+  // ---------- login: крок 1 — вибір відділу, крок 2 — вибір ПІБ ----------
+  const selectedDept = loginDept ? DEPARTMENTS.find((d) => d.key === loginDept) ?? null : null;
   const Login = () => (
     <main style={sx("flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:56px 24px 70px;animation:floatUp .5s ease")}>
       <span style={sx("display:grid;place-items:center;width:82px;height:82px;border-radius:28px;background:#14b8a6;color:#fff;font-size:36px;margin-bottom:22px;box-shadow:0 18px 30px -10px rgba(20,184,166,.6),inset 0 -6px 12px rgba(6,95,85,.4),inset 0 6px 11px rgba(255,255,255,.35);animation:bob 4s ease-in-out infinite")}>
         <Icon name="fa-solid fa-code-branch" />
       </span>
       <h1 className="disp" style={sx("font-size:42px;font-weight:800;letter-spacing:-1px;margin-bottom:8px;text-align:center")}>Ласкаво просимо до GitШлях</h1>
-      <p style={sx("font-size:19px;color:#5b6d68;margin:0 0 36px;max-width:560px;text-align:center;text-wrap:pretty")}>
-        Оберіть, під яким відділом увійти — прогрес кожного акаунта зберігається окремо.
-      </p>
-      {/* 9 відділів у сітці 5 + 4 (на вузьких екранах перенос адаптивний) */}
-      <div style={sx("display:flex;flex-wrap:wrap;justify-content:center;gap:16px;width:100%;max-width:960px")}>
-        {ACCOUNTS.map((acc) => (
-          <Clay
-            key={acc.key}
-            onClick={() => selectAccount(acc)}
-            base="display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;width:178px;padding:22px 16px;border:none;cursor:pointer;border-radius:24px;background:#fff;transition:transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .18s ease;box-shadow:0 16px 32px -18px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 12px rgba(255,255,255,.9)"
-            hover="transform:translateY(-5px);box-shadow:0 26px 40px -18px rgba(17,74,68,.35),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 12px rgba(255,255,255,.9)"
+
+      {!selectedDept ? (
+        <>
+          <p style={sx("font-size:19px;color:#5b6d68;margin:0 0 36px;max-width:560px;text-align:center;text-wrap:pretty")}>
+            Крок 1 — оберіть свій відділ.
+          </p>
+          <div style={sx("display:flex;flex-wrap:wrap;justify-content:center;gap:16px;width:100%;max-width:960px")}>
+            {DEPARTMENTS.map((d) => (
+              <Clay
+                key={d.key}
+                onClick={() => setLoginDept(d.key)}
+                base="display:flex;flex-direction:column;align-items:center;gap:12px;text-align:center;width:178px;padding:22px 16px;border:none;cursor:pointer;border-radius:24px;background:#fff;transition:transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .18s ease;box-shadow:0 16px 32px -18px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 12px rgba(255,255,255,.9)"
+                hover="transform:translateY(-5px);box-shadow:0 26px 40px -18px rgba(17,74,68,.35),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 12px rgba(255,255,255,.9)"
+              >
+                <span style={sx(`display:grid;place-items:center;width:64px;height:64px;border-radius:20px;color:#fff;font-size:27px;background:${d.color};box-shadow:0 12px 22px -8px ${d.color}cc,inset 0 -4px 8px rgba(0,0,0,.15),inset 0 5px 9px rgba(255,255,255,.35)`)}>
+                  <Icon name={d.icon} />
+                </span>
+                <span style={sx("display:flex;flex-direction:column;gap:3px")}>
+                  <span style={sx("font-weight:800;font-size:15.5px;color:#14332f")}>{d.name}</span>
+                  <span style={sx("font-size:12px;color:#8b9c97;font-weight:600;line-height:1.3")}>{peopleByDept(d.key).length} учасників</span>
+                </span>
+              </Clay>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <p style={sx("font-size:19px;color:#5b6d68;margin:0 0 8px;max-width:560px;text-align:center;text-wrap:pretty")}>
+            Крок 2 — оберіть своє імʼя у відділі{" "}
+            <b style={{ color: selectedDept.color }}>{selectedDept.name}</b>.
+          </p>
+          <button
+            onClick={() => setLoginDept(null)}
+            style={sx("display:inline-flex;align-items:center;gap:8px;margin-bottom:26px;padding:9px 16px;border:none;cursor:pointer;border-radius:14px;font-weight:700;font-size:14px;color:#5b6d68;background:#fff;box-shadow:inset 0 -3px 6px rgba(17,74,68,.05),inset 0 3px 5px rgba(255,255,255,.9),0 5px 12px -7px rgba(17,74,68,.2)")}
           >
-            <span style={sx(`display:grid;place-items:center;width:64px;height:64px;border-radius:20px;color:#fff;font-size:27px;background:${acc.color};box-shadow:0 12px 22px -8px ${acc.color}cc,inset 0 -4px 8px rgba(0,0,0,.15),inset 0 5px 9px rgba(255,255,255,.35)`)}>
-              <Icon name={acc.icon} />
-            </span>
-            <span style={sx("display:flex;flex-direction:column;gap:3px")}>
-              <span style={sx("font-weight:800;font-size:15.5px;color:#14332f")}>{acc.name}</span>
-              <span style={sx("font-size:12px;color:#8b9c97;font-weight:600;line-height:1.3")}>{acc.role}</span>
-            </span>
-          </Clay>
-        ))}
-      </div>
+            <Icon name="fa-solid fa-arrow-left" /> Інший відділ
+          </button>
+          <div style={sx("display:flex;flex-wrap:wrap;justify-content:center;gap:12px;width:100%;max-width:760px")}>
+            {peopleByDept(selectedDept.key).map((p) => {
+              const acc = toAccount(p);
+              return (
+                <Clay
+                  key={acc.id}
+                  onClick={() => selectAccount(acc)}
+                  base="display:flex;align-items:center;gap:12px;text-align:left;min-width:240px;padding:14px 18px;border:none;cursor:pointer;border-radius:18px;background:#fff;transition:transform .16s,box-shadow .16s;box-shadow:0 12px 26px -18px rgba(17,74,68,.3),inset 0 -4px 9px rgba(17,74,68,.04),inset 0 5px 9px rgba(255,255,255,.9)"
+                  hover="transform:translateY(-3px);box-shadow:0 20px 34px -18px rgba(17,74,68,.35),inset 0 -4px 9px rgba(17,74,68,.04),inset 0 5px 9px rgba(255,255,255,.9)"
+                >
+                  <span style={sx(`display:grid;place-items:center;width:46px;height:46px;border-radius:50%;color:#fff;font-weight:800;font-size:15px;flex:none;background:${acc.color};box-shadow:inset 0 -3px 6px rgba(0,0,0,.12),inset 0 3px 5px rgba(255,255,255,.35)`)}>
+                    {acc.initials}
+                  </span>
+                  <span style={sx("font-weight:800;font-size:15px;color:#14332f")}>{acc.name}</span>
+                </Clay>
+              );
+            })}
+          </div>
+        </>
+      )}
     </main>
   );
 
@@ -1074,25 +1162,21 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
       return { icon: earned ? b.icon : "fa-solid fa-lock", name: b.name, desc: b.desc, cardStyle, iconWrap, textColor: earned ? "" : "color:#a7b6b1;" };
     });
 
-    // Рейтинг — лише наші 5 відділів. XP кожного беремо з його збереженого
-    // прогресу (поточний акаунт — з активного стану).
-    const rows = ACCOUNTS.map((acc) => {
-      const you = s.user?.key === acc.key;
-      const xp = you ? s.xp : loadProgress(acc.key)?.xp ?? 0;
-      return { name: acc.name, color: acc.color, icon: acc.icon as string | undefined, xp, you };
-    });
-    rows.sort((a, b) => b.xp - a.xp);
-    let rank = 1;
-    const leaderboard = rows.map((l, i) => {
+    // Рейтинг — із сервера (/api/leaderboard). Власний рядок показуємо з «живим»
+    // XP, щоб число співпадало зі станом навіть до того, як збереження долетіло.
+    const patched = lbRows.map((r) => (s.user && r.id === s.user.id ? { ...r, xp: s.xp } : r));
+    patched.sort((a, b) => (lbSort === "name" ? a.name.localeCompare(b.name, "uk") : b.xp - a.xp));
+    const medal = lbSort === "xp" && !lbDept; // медалі 1-2-3 лише в загальному топі
+    const leaderboard = patched.map((l, i) => {
       const rk = i + 1;
-      if (l.you) rank = rk;
-      const rowStyle = "display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid #eef3f1;" + (l.you ? "background:#eafaf7;" : "");
+      const you = s.user?.id === l.id;
+      const rowStyle = "display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid #eef3f1;" + (you ? "background:#eafaf7;" : "");
       let rankStyle = "display:grid;place-items:center;width:30px;height:30px;border-radius:10px;font-weight:800;font-size:14px;";
-      if (rk === 1) rankStyle += "background:#ffd76a;color:#8a6a10;";
-      else if (rk === 2) rankStyle += "background:#dbe3e0;color:#5b6d68;";
-      else if (rk === 3) rankStyle += "background:#e6c48a;color:#7a5a1e;";
+      if (medal && rk === 1) rankStyle += "background:#ffd76a;color:#8a6a10;";
+      else if (medal && rk === 2) rankStyle += "background:#dbe3e0;color:#5b6d68;";
+      else if (medal && rk === 3) rankStyle += "background:#e6c48a;color:#7a5a1e;";
       else rankStyle += "background:#eef3f1;color:#8b9c97;";
-      return { rank: rk, name: l.you ? l.name + " (ви)" : l.name, initials: "", color: l.color, xp: l.xp, rowStyle, rankStyle, icon: l.icon };
+      return { rank: rk, name: you ? l.name + " (ви)" : l.name, department: l.department, initials: l.initials, color: l.color, xp: l.xp, rowStyle, rankStyle };
     });
 
     return (
@@ -1109,7 +1193,7 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
               </div>
             </div>
             <div style={sx("margin-top:16px;font-weight:800;font-size:17px")}>{user.name}</div>
-            <div style={sx("color:#8b9c97;font-weight:700;font-size:13.5px;margin-bottom:2px")}>{user.role}</div>
+            <div style={sx("color:#8b9c97;font-weight:700;font-size:13.5px;margin-bottom:2px")}>{user.department}</div>
             <div style={sx("margin-top:6px;font-size:13.5px;color:#5b6d68;font-weight:700")}>
               Ще <b style={{ color: "#14b8a6" }}>{toNext} XP</b> до рівня {level + 1}
             </div>
@@ -1132,7 +1216,7 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
             </div>
             <div style={sx("padding:20px;border-radius:22px;background:#fff;box-shadow:inset 0 -4px 8px rgba(17,74,68,.05),inset 0 4px 7px rgba(255,255,255,.9),0 10px 22px -13px rgba(17,74,68,.2)")}>
               <Icon name="fa-solid fa-ranking-star" style={sx("color:#e0a03e;font-size:22px")} />
-              <div className="disp" style={sx("font-size:30px;font-weight:800;margin-top:8px")}>#{rank}</div>
+              <div className="disp" style={sx("font-size:30px;font-weight:800;margin-top:8px")}>{myRank ? "#" + myRank : "—"}</div>
               <div style={sx("color:#8b9c97;font-weight:700;font-size:13.5px")}>місце в рейтингу</div>
             </div>
           </div>
@@ -1153,20 +1237,57 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
 
         {showLeaderboard && (
           <>
-            <h2 className="disp" style={sx("font-size:22px;font-weight:800;margin:28px 0 14px")}>Рейтинг команди</h2>
+            <div style={sx("display:flex;align-items:center;gap:12px;margin:28px 0 14px;flex-wrap:wrap")}>
+              <h2 className="disp" style={sx("font-size:22px;font-weight:800;margin:0;flex:1;min-width:160px")}>Рейтинг команди</h2>
+              {/* Фільтр за відділом. «» = топ-10 без фільтра. */}
+              <label style={sx("display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#5b6d68")}>
+                <Icon name="fa-solid fa-filter" style={sx("color:#7c6ee0")} />
+                <select
+                  value={lbDept}
+                  onChange={(e) => setLbDept(e.target.value)}
+                  style={sx("border:none;background:#fff;border-radius:12px;padding:9px 12px;font-weight:800;color:#0f9c8c;cursor:pointer;outline:none;box-shadow:inset 0 -3px 6px rgba(17,74,68,.05),inset 0 3px 5px rgba(255,255,255,.9),0 5px 12px -8px rgba(17,74,68,.2);font-size:13px")}
+                >
+                  <option value="">Топ-10 (усі)</option>
+                  {DEPARTMENTS.map((d) => (
+                    <option key={d.key} value={d.key}>{d.name}</option>
+                  ))}
+                </select>
+              </label>
+              {/* Сортування: за XP (рейтинг) або за іменем. */}
+              <div style={sx("display:inline-flex;gap:4px;padding:4px;border-radius:13px;background:#dde6e2;box-shadow:inset 0 2px 5px rgba(17,74,68,.1)")}>
+                {([["xp", "За XP"], ["name", "За іменем"]] as const).map(([key, label]) => {
+                  const on = lbSort === key;
+                  const seg = "padding:7px 13px;border:none;cursor:pointer;border-radius:10px;font-weight:800;font-size:12.5px;transition:all .15s;";
+                  return (
+                    <button key={key} onClick={() => setLbSort(key)} style={sx(on ? seg + "color:#0d7d70;background:#fff;box-shadow:0 5px 11px -6px rgba(17,74,68,.28);" : seg + "color:#7d8f8a;background:transparent;")}>{label}</button>
+                  );
+                })}
+              </div>
+            </div>
             <div style={sx("border-radius:24px;background:#fff;overflow:hidden;box-shadow:0 14px 32px -18px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 11px rgba(255,255,255,.9)")}>
-              {leaderboard.map((l, i) => (
-                <div key={i} style={sx(l.rowStyle)}>
-                  <span style={sx(l.rankStyle)}>{l.rank}</span>
-                  <span style={sx(`display:grid;place-items:center;width:42px;height:42px;border-radius:50%;font-weight:800;color:${l.icon ? "#fff" : "#14332f"};font-size:${l.icon ? "17px" : "15px"};background:${l.color};box-shadow:inset 0 -3px 6px rgba(0,0,0,.08),inset 0 3px 5px rgba(255,255,255,.4)`)}>
-                    {l.icon ? <Icon name={l.icon} /> : l.initials}
-                  </span>
-                  <span style={sx("font-weight:800;font-size:15px")}>{l.name}</span>
-                  <span style={sx("margin-left:auto;font-weight:800;color:#14b8a6")}>
-                    <Icon name="fa-solid fa-bolt" style={sx("font-size:13px")} /> {l.xp}
-                  </span>
+              {lbLoading && leaderboard.length === 0 ? (
+                <div style={sx("padding:26px 20px;text-align:center;color:#8b9c97;font-weight:700")}>Завантаження рейтингу…</div>
+              ) : leaderboard.length === 0 ? (
+                <div style={sx("padding:26px 20px;text-align:center;color:#8b9c97;font-weight:700")}>
+                  {lbDept ? "У цьому відділі ще немає учасників." : "Рейтинг зʼявиться, щойно хтось почне навчання."}
                 </div>
-              ))}
+              ) : (
+                leaderboard.map((l, i) => (
+                  <div key={i} style={sx(l.rowStyle)}>
+                    <span style={sx(l.rankStyle)}>{l.rank}</span>
+                    <span style={sx(`display:grid;place-items:center;width:42px;height:42px;border-radius:50%;font-weight:800;color:#fff;font-size:15px;flex:none;background:${l.color};box-shadow:inset 0 -3px 6px rgba(0,0,0,.08),inset 0 3px 5px rgba(255,255,255,.4)`)}>
+                      {l.initials}
+                    </span>
+                    <span style={sx("display:flex;flex-direction:column;min-width:0")}>
+                      <span style={sx("font-weight:800;font-size:15px")}>{l.name}</span>
+                      <span style={sx("font-size:12px;color:#8b9c97;font-weight:700")}>{l.department}</span>
+                    </span>
+                    <span style={sx("margin-left:auto;font-weight:800;color:#14b8a6;flex:none")}>
+                      <Icon name="fa-solid fa-bolt" style={sx("font-size:13px")} /> {l.xp}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </>
         )}
