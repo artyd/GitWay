@@ -1049,16 +1049,16 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
             </div>
             <div style={sx("display:flex;flex-wrap:wrap;gap:12px;justify-content:center")}>
               {s.activeId < TOTAL_LESSONS && (
-                <button onClick={goNextLesson} style={sx("padding:15px 30px;border:none;cursor:pointer;border-radius:18px;font-weight:800;font-size:16px;color:#fff;background:#14b8a6;box-shadow:0 14px 26px -10px rgba(20,184,166,.6),inset 0 -5px 10px rgba(6,95,85,.4),inset 0 5px 9px rgba(255,255,255,.32)")}>
+                <Clay onClick={goNextLesson} base="padding:15px 30px;border:none;cursor:pointer;border-radius:18px;font-weight:800;font-size:16px;color:#fff;background:#14b8a6;box-shadow:0 14px 26px -10px rgba(20,184,166,.6),inset 0 -5px 10px rgba(6,95,85,.4),inset 0 5px 9px rgba(255,255,255,.32);transition:transform .16s,box-shadow .16s" hover="transform:translateY(-3px);box-shadow:0 20px 34px -12px rgba(20,184,166,.7),inset 0 -5px 10px rgba(6,95,85,.4),inset 0 5px 9px rgba(255,255,255,.32)">
                   Наступний урок <Icon name="fa-solid fa-arrow-right" />
-                </button>
+                </Clay>
               )}
-              <button onClick={() => go("roadmap")} style={sx(`padding:15px 30px;border:none;cursor:pointer;border-radius:18px;font-weight:800;font-size:16px;${s.activeId < TOTAL_LESSONS ? "color:#0f9c8c;background:#fff;box-shadow:inset 0 -4px 8px rgba(17,74,68,.05),inset 0 4px 7px rgba(255,255,255,.9),0 8px 18px -10px rgba(17,74,68,.2)" : "color:#fff;background:#14b8a6;box-shadow:0 14px 26px -10px rgba(20,184,166,.6),inset 0 -5px 10px rgba(6,95,85,.4),inset 0 5px 9px rgba(255,255,255,.32)"}`)}>
+              <Clay onClick={() => go("roadmap")} base={`padding:15px 30px;border:none;cursor:pointer;border-radius:18px;font-weight:800;font-size:16px;transition:transform .16s,box-shadow .16s;${s.activeId < TOTAL_LESSONS ? "color:#0f9c8c;background:#fff;box-shadow:inset 0 -4px 8px rgba(17,74,68,.05),inset 0 4px 7px rgba(255,255,255,.9),0 8px 18px -10px rgba(17,74,68,.2)" : "color:#fff;background:#14b8a6;box-shadow:0 14px 26px -10px rgba(20,184,166,.6),inset 0 -5px 10px rgba(6,95,85,.4),inset 0 5px 9px rgba(255,255,255,.32)"}`} hover={s.activeId < TOTAL_LESSONS ? "transform:translateY(-3px);box-shadow:inset 0 -4px 8px rgba(17,74,68,.05),inset 0 4px 7px rgba(255,255,255,.9),0 14px 26px -12px rgba(17,74,68,.28)" : "transform:translateY(-3px);box-shadow:0 20px 34px -12px rgba(20,184,166,.7),inset 0 -5px 10px rgba(6,95,85,.4),inset 0 5px 9px rgba(255,255,255,.32)"}>
                 Далі до карти <Icon name="fa-solid fa-arrow-right" />
-              </button>
-              <button onClick={() => go("progress")} style={sx("padding:15px 30px;border:none;cursor:pointer;border-radius:18px;font-weight:800;font-size:16px;color:#0f9c8c;background:#fff;box-shadow:inset 0 -4px 8px rgba(17,74,68,.05),inset 0 4px 7px rgba(255,255,255,.9),0 8px 18px -10px rgba(17,74,68,.2)")}>
+              </Clay>
+              <Clay onClick={() => go("progress")} base="padding:15px 30px;border:none;cursor:pointer;border-radius:18px;font-weight:800;font-size:16px;color:#0f9c8c;background:#fff;box-shadow:inset 0 -4px 8px rgba(17,74,68,.05),inset 0 4px 7px rgba(255,255,255,.9),0 8px 18px -10px rgba(17,74,68,.2);transition:transform .16s,box-shadow .16s" hover="transform:translateY(-3px);box-shadow:inset 0 -4px 8px rgba(17,74,68,.05),inset 0 4px 7px rgba(255,255,255,.9),0 14px 26px -12px rgba(17,74,68,.28)">
                 Мій прогрес
-              </button>
+              </Clay>
             </div>
           </div>
         ) : (
