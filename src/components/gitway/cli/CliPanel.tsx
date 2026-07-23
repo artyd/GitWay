@@ -50,7 +50,7 @@ export function CliPanel({ account }: { account: string }) {
         Це навчальне середовище — реального агента не запускає. Набір команд оновлюється з файлу даних.
       </p>
 
-      <div style={sx("min-height:520px;border-radius:16px;overflow:hidden;box-shadow:0 20px 44px -20px rgba(17,74,68,.4)")}>
+      <div style={sx("height:min(76vh,860px);min-height:520px;border-radius:16px;overflow:hidden;box-shadow:0 20px 44px -20px rgba(17,74,68,.4)")}>
         <Terminal
           key={tool}
           backend={sim}
