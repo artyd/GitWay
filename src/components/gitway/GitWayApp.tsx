@@ -328,13 +328,25 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
   const quizNext = () => {
     const total = quizCount(activeLesson);
     if (s.quizIndex + 1 >= total) {
-      const gain = activeLesson.xp + s.correct * 20;
-      const done = s.completed.includes(s.activeId) ? s.completed : s.completed.concat([s.activeId]);
-      const nextCur = Math.min(TOTAL_LESSONS, Math.max(s.current, s.activeId + 1));
-      set({ quizDone: true, earned: gain, xp: s.xp + gain, completed: done, current: nextCur });
+      // Урок зараховуємо і відкриваємо наступний ЛИШЕ якщо всі відповіді правильні.
+      const passed = s.correct >= total;
+      if (passed) {
+        const gain = activeLesson.xp + s.correct * 20;
+        const done = s.completed.includes(s.activeId) ? s.completed : s.completed.concat([s.activeId]);
+        const nextCur = Math.min(TOTAL_LESSONS, Math.max(s.current, s.activeId + 1));
+        set({ quizDone: true, earned: gain, xp: s.xp + gain, completed: done, current: nextCur });
+      } else {
+        // Є помилки — урок не зараховуємо, наступний не відкриваємо, XP не нараховуємо.
+        set({ quizDone: true, earned: 0 });
+      }
     } else {
       set({ quizIndex: s.quizIndex + 1, selected: null, answered: false, cmdInput: "", cmdChecked: false, cmdOk: false });
     }
+  };
+  // Перепройти тест з нуля (після невдалої спроби).
+  const quizRetry = () => {
+    set({ quizIndex: 0, selected: null, answered: false, correct: 0, quizDone: false, earned: 0, cmdInput: "", cmdChecked: false, cmdOk: false });
+    scrollTop();
   };
 
   const statusOf = (id: number): "done" | "current" | "locked" => {
@@ -1088,10 +1100,32 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
   const Quiz = () => {
     const isCmd = !!(activeLesson.commandQuiz && activeLesson.commandQuiz.length);
     const total = isCmd ? activeLesson.commandQuiz!.length : activeLesson.quiz.length;
+    const passed = s.correct >= total; // урок відкриває наступний лише при 100% правильних
 
     return (
       <main style={sx("flex:1;max-width:720px;margin:0 auto;width:100%;padding:34px 24px 90px;animation:floatUp .4s ease")}>
-        {s.quizDone ? (
+        {s.quizDone && !passed ? (
+          <div style={sx("text-align:center;padding:20px 0;animation:popIn .5s ease")}>
+            <span style={sx("display:grid;place-items:center;width:110px;height:110px;border-radius:50%;margin:0 auto 22px;font-size:44px;color:#fff;background:#f2994a;box-shadow:0 22px 40px -14px rgba(242,153,74,.55),inset 0 -7px 14px rgba(150,80,20,.4),inset 0 7px 12px rgba(255,255,255,.35)")}>
+              <Icon name="fa-solid fa-arrow-rotate-left" />
+            </span>
+            <h1 className="disp" style={sx("font-size:34px;font-weight:800;margin-bottom:8px")}>Майже вийшло!</h1>
+            <p style={sx("font-size:18px;color:#5b6d68;margin:0 0 8px")}>
+              Правильних відповідей: <b style={{ color: "#f2994a" }}>{s.correct} з {total}</b>
+            </p>
+            <p style={sx("font-size:15.5px;color:#8b9c97;margin:0 auto 26px;max-width:440px;line-height:1.55")}>
+              Щоб відкрити наступний урок, потрібно відповісти правильно на всі питання. Перепройдіть тест ще раз.
+            </p>
+            <div style={sx("display:flex;gap:12px;justify-content:center")}>
+              <button onClick={quizRetry} style={sx("padding:15px 30px;border:none;cursor:pointer;border-radius:18px;font-weight:800;font-size:16px;color:#fff;background:#f2994a;box-shadow:0 14px 26px -10px rgba(242,153,74,.6),inset 0 -5px 10px rgba(150,80,20,.35),inset 0 5px 9px rgba(255,255,255,.32)")}>
+                <Icon name="fa-solid fa-arrow-rotate-left" /> Перепройти тест
+              </button>
+              <button onClick={() => go("roadmap")} style={sx("padding:15px 30px;border:none;cursor:pointer;border-radius:18px;font-weight:800;font-size:16px;color:#0f9c8c;background:#fff;box-shadow:inset 0 -4px 8px rgba(17,74,68,.05),inset 0 4px 7px rgba(255,255,255,.9),0 8px 18px -10px rgba(17,74,68,.2)")}>
+                До карти
+              </button>
+            </div>
+          </div>
+        ) : s.quizDone ? (
           <div style={sx("text-align:center;padding:20px 0;animation:popIn .5s ease")}>
             <span style={sx("display:grid;place-items:center;width:110px;height:110px;border-radius:50%;margin:0 auto 22px;font-size:48px;color:#fff;background:#14b8a6;box-shadow:0 22px 40px -14px rgba(20,184,166,.6),inset 0 -7px 14px rgba(6,95,85,.4),inset 0 7px 12px rgba(255,255,255,.35);animation:bob 3.5s ease-in-out infinite")}>
               <Icon name="fa-solid fa-trophy" />
