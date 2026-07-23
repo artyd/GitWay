@@ -190,6 +190,29 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
     set({ activeId: id, screen: "lesson" });
     scrollTop();
   };
+  // Перехід до наступного уроку після завершення тесту (без повернення на карту).
+  const goNextLesson = () => {
+    const nextId = s.activeId + 1;
+    if (nextId > TOTAL_LESSONS) {
+      go("roadmap");
+      return;
+    }
+    set({
+      activeId: nextId,
+      screen: "lesson",
+      // скидаємо стан тесту попереднього уроку
+      quizIndex: 0,
+      selected: null,
+      answered: false,
+      correct: 0,
+      quizDone: false,
+      earned: 0,
+      cmdInput: "",
+      cmdChecked: false,
+      cmdOk: false,
+    });
+    scrollTop();
+  };
   const goSandbox = () => {
     set({ screen: "sandbox" });
     scrollTop();
@@ -1024,8 +1047,13 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
                 <div style={sx("font-size:12.5px;color:#8b9c97;font-weight:700")}>днів поспіль</div>
               </div>
             </div>
-            <div style={sx("display:flex;gap:12px;justify-content:center")}>
-              <button onClick={() => go("roadmap")} style={sx("padding:15px 30px;border:none;cursor:pointer;border-radius:18px;font-weight:800;font-size:16px;color:#fff;background:#14b8a6;box-shadow:0 14px 26px -10px rgba(20,184,166,.6),inset 0 -5px 10px rgba(6,95,85,.4),inset 0 5px 9px rgba(255,255,255,.32)")}>
+            <div style={sx("display:flex;flex-wrap:wrap;gap:12px;justify-content:center")}>
+              {s.activeId < TOTAL_LESSONS && (
+                <button onClick={goNextLesson} style={sx("padding:15px 30px;border:none;cursor:pointer;border-radius:18px;font-weight:800;font-size:16px;color:#fff;background:#14b8a6;box-shadow:0 14px 26px -10px rgba(20,184,166,.6),inset 0 -5px 10px rgba(6,95,85,.4),inset 0 5px 9px rgba(255,255,255,.32)")}>
+                  Наступний урок <Icon name="fa-solid fa-arrow-right" />
+                </button>
+              )}
+              <button onClick={() => go("roadmap")} style={sx(`padding:15px 30px;border:none;cursor:pointer;border-radius:18px;font-weight:800;font-size:16px;${s.activeId < TOTAL_LESSONS ? "color:#0f9c8c;background:#fff;box-shadow:inset 0 -4px 8px rgba(17,74,68,.05),inset 0 4px 7px rgba(255,255,255,.9),0 8px 18px -10px rgba(17,74,68,.2)" : "color:#fff;background:#14b8a6;box-shadow:0 14px 26px -10px rgba(20,184,166,.6),inset 0 -5px 10px rgba(6,95,85,.4),inset 0 5px 9px rgba(255,255,255,.32)"}`)}>
                 Далі до карти <Icon name="fa-solid fa-arrow-right" />
               </button>
               <button onClick={() => go("progress")} style={sx("padding:15px 30px;border:none;cursor:pointer;border-radius:18px;font-weight:800;font-size:16px;color:#0f9c8c;background:#fff;box-shadow:inset 0 -4px 8px rgba(17,74,68,.05),inset 0 4px 7px rgba(255,255,255,.9),0 8px 18px -10px rgba(17,74,68,.2)")}>
