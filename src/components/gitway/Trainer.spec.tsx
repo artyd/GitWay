@@ -1,13 +1,16 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup, within } from "@testing-library/react";
+import { beforeEach } from "vitest";
 import GitWayApp from "./GitWayApp";
+import { mockApi, login } from "./test-helpers";
 
 afterEach(cleanup);
+beforeEach(() => mockApi());
 
 function loginAndOpenTrainer() {
   render(<GitWayApp />);
-  fireEvent.click(screen.getByText("Директор")); // логін через акаунт-відділ
+  login(); // двокроковий вхід: відділ → ПІБ
   fireEvent.click(screen.getByText("Тренажер")); // перехід у Тренажер
 }
 
