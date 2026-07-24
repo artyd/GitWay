@@ -6,21 +6,24 @@ import { CATALOG, CATALOG_IDS } from "./catalog";
 import type { LessonFile } from "./types";
 
 describe("завантаження курсів у LESSONS", () => {
-  it("додає два курси по 12 уроків із суцільними id та фазами 4/5", () => {
-    expect(TOTAL_LESSONS).toBe(35);
-    expect(PHASE_IDS).toEqual([1, 2, 3, 4, 5]);
-    // суцільні id 1..35
+  it("додає два курси по 12 уроків + фінальний урок із суцільними id та фазами 4/5/6", () => {
+    expect(TOTAL_LESSONS).toBe(36);
+    expect(PHASE_IDS).toEqual([1, 2, 3, 4, 5, 6]);
+    // суцільні id 1..36
     LESSONS.forEach((l, i) => expect(l.id).toBe(i + 1));
     const phase4 = LESSONS.filter((l) => l.phase === 4);
     const phase5 = LESSONS.filter((l) => l.phase === 5);
+    const phase6 = LESSONS.filter((l) => l.phase === 6);
     expect(phase4).toHaveLength(12);
     expect(phase5).toHaveLength(12);
+    expect(phase6).toHaveLength(1);
     expect(phase4[0].id).toBe(12);
     expect(phase5[0].id).toBe(24);
+    expect(phase6[0].id).toBe(36);
   });
 
   it("кожен урок CLI-курсів має 5-питальний командний квіз, аудіо й опис", () => {
-    for (const l of LESSONS.filter((x) => x.phase >= 4)) {
+    for (const l of LESSONS.filter((x) => x.phase === 4 || x.phase === 5)) {
       expect(l.commandQuiz).toBeDefined();
       expect(l.commandQuiz).toHaveLength(5);
       expect(l.audio).toMatch(/^\/audio\/(claude|codex)-\d\d\.mp3$/); // справжнє аудіо
@@ -37,7 +40,7 @@ describe("завантаження курсів у LESSONS", () => {
       }
     }
     // усі CLI-питання мають і вибір, і додатковий ввід
-    const cli = LESSONS.filter((x) => x.phase >= 4);
+    const cli = LESSONS.filter((x) => x.phase === 4 || x.phase === 5);
     expect(cli.every((l) => l.commandQuiz!.every((q) => q.options && q.accept))).toBe(true);
   });
 
