@@ -9,8 +9,11 @@ services:
       POSTGRES_DB: gitway
     volumes:
       - gitway-db:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # Порт назовні НЕ публікуємо: застосунок ходить у БД по внутрішній мережі (host = db).
+    # Якщо потрібен зовнішній доступ до Postgres — розкоментуйте й оберіть вільний порт,
+    # напр. "5433:5432" (5432 на хості вже зайнято іншим Postgres).
+    # ports:
+    #   - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U gitway"]
       interval: 5s
@@ -31,4 +34,9 @@ services:
     restart: unless-stopped
 
 volumes:
+  # Зовнішній том: НЕ видаляється навіть при `docker compose down -v` / recreate.
+  # Дані прогресу зберігаються назавжди. Прив'язано до наявного тому gitway_gitway-db.
+  # Один раз на сервері (ідемпотентно): docker volume create gitway_gitway-db
   gitway-db:
+    external: true
+    name: gitway_gitway-db
