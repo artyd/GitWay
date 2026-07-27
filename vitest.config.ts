@@ -11,6 +11,7 @@ export default defineConfig({
       "src/lib/cli-sim/**/*.spec.ts",
       "src/lib/content/**/*.spec.ts",
       "src/components/gitway/**/*.spec.tsx",
+      "src/app/**/*.spec.ts",
     ],
     globals: false,
   },

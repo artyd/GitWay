@@ -23,4 +23,11 @@ describe("Екран входу — крок 1 (відділ) → крок 2 (П
     fireEvent.click(screen.getByText("Інший відділ"));
     expect(screen.getByText("Закупівлі")).toBeTruthy();
   });
+
+  it("відділ «Продажі» містить нових учасників", () => {
+    render(<GitWayApp />);
+    fireEvent.click(screen.getByText("Продажі"));
+    expect(screen.getByText("Походенко Осорио")).toBeTruthy();
+    expect(screen.getByText("Костенко Татьяна")).toBeTruthy();
+  });
 });

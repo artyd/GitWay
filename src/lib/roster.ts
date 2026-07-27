@@ -42,6 +42,8 @@ export const PEOPLE: Person[] = [
   { name: "Пермякова Инна", deptKey: "prodazhi" },
   { name: "Озерова Виктория", deptKey: "prodazhi" },
   { name: "Ярцева Леся", deptKey: "prodazhi" },
+  { name: "Походенко Осорио", deptKey: "prodazhi" },
+  { name: "Костенко Татьяна", deptKey: "prodazhi" },
 
   { name: "Ковтун Анна", deptKey: "finance" },
   { name: "Шевченко Татьяна", deptKey: "finance" },

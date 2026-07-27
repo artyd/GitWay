@@ -110,6 +110,16 @@ export async function progressByDept(deptKey: string): Promise<LbRow[]> {
   return rows.map((r) => ({ userId: r.user_id, name: r.name, department: r.department, deptKey: r.dept_key, xp: r.xp }));
 }
 
+// Сума XP по кожному відділу (для агрегованого рейтингу відділів).
+// Знаменник (кількість учасників) береться з роестру у route, а не звідси.
+export async function xpTotalsByDept(): Promise<{ deptKey: string; totalXp: number }[]> {
+  await ensureSchema();
+  const { rows } = await getPool().query(
+    "SELECT dept_key, COALESCE(SUM(xp),0)::int AS total_xp FROM progress GROUP BY dept_key",
+  );
+  return rows.map((r) => ({ deptKey: r.dept_key as string, totalXp: Number(r.total_xp) }));
+}
+
 // Місце учасника в загальному рейтингу (1 = найбільше XP). null, якщо ще нема прогресу.
 export async function rankOf(userId: string): Promise<number | null> {
   await ensureSchema();
