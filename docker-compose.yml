@@ -34,4 +34,9 @@ services:
     restart: unless-stopped
 
 volumes:
+  # Зовнішній том: НЕ видаляється навіть при `docker compose down -v` / recreate.
+  # Дані прогресу зберігаються назавжди. Прив'язано до наявного тому gitway_gitway-db.
+  # Один раз на сервері (ідемпотентно): docker volume create gitway_gitway-db
   gitway-db:
+    external: true
+    name: gitway_gitway-db
