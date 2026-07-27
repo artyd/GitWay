@@ -91,3 +91,15 @@ input::placeholder {
     transform: translateX(0);
   }
 }
+
+/* Сходинки п'єдесталу «виростають» знизу. */
+@keyframes stepGrow {
+  from {
+    transform: scaleY(0.15);
+    opacity: 0;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}

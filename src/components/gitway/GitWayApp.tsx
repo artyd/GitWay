@@ -66,7 +66,7 @@ async function postProgress(acc: Account, data: SavedProgress): Promise<void> {
 }
 
 // Рядок рейтингу з /api/leaderboard.
-type LbRow = { id: string; name: string; department: string; deptKey: string; xp: number; initials: string; color: string; icon: string; rank: number };
+type LbRow = { id: string; name: string; department: string; deptKey: string; xp: number; initials: string; color: string; icon: string; rank: number; count?: number; totalXp?: number };
 type State = {
   screen: Screen;
   user: Account | null;
@@ -147,6 +147,11 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
   const [lbRows, setLbRows] = useState<LbRow[]>([]);
   const [lbDept, setLbDept] = useState<string>(""); // "" = топ-10 без фільтра
   const [lbSort, setLbSort] = useState<"xp" | "name">("xp");
+  const [lbView, setLbView] = useState<"people" | "dept">("people"); // рейтинг: учасники чи відділи
+
+  // Вітальне вікно-п'єдестал відділів (показуємо при кожному вході).
+  const [podiumOpen, setPodiumOpen] = useState(false);
+  const [podiumRows, setPodiumRows] = useState<LbRow[]>([]);
   const [myRank, setMyRank] = useState<number | null>(null);
   const [lbLoading, setLbLoading] = useState(false);
 
@@ -167,15 +172,32 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
     if (s.screen !== "progress" || !s.user) return;
     let alive = true;
     setLbLoading(true);
-    const params = new URLSearchParams({ sort: lbSort, me: s.user.id, limit: "10" });
-    if (lbDept) params.set("department", lbDept);
+    let params: URLSearchParams;
+    if (lbView === "dept") {
+      // Рейтинг відділів — агрегат, без фільтра відділу та без ранга учасника.
+      params = new URLSearchParams({ mode: "dept" });
+    } else {
+      params = new URLSearchParams({ sort: lbSort, me: s.user.id, limit: "10" });
+      if (lbDept) params.set("department", lbDept);
+    }
     fetch(`/api/leaderboard?${params.toString()}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => { if (!alive) return; setLbRows(j.rows ?? []); setMyRank(j.myRank ?? null); })
       .catch(() => { if (alive) setLbRows([]); })
       .finally(() => { if (alive) setLbLoading(false); });
     return () => { alive = false; };
-  }, [s.screen, s.user, lbDept, lbSort, s.xp]);
+  }, [s.screen, s.user, lbDept, lbSort, lbView, s.xp]);
+
+  // Дані для вітального п'єдесталу: топ-3 відділи за середнім XP на учасника.
+  useEffect(() => {
+    if (!podiumOpen) return;
+    let alive = true;
+    fetch(`/api/leaderboard?mode=dept`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (alive) setPodiumRows((j.rows ?? []).slice(0, 3)); })
+      .catch(() => { if (alive) setPodiumRows([]); });
+    return () => { alive = false; };
+  }, [podiumOpen]);
 
   // ---------- navigation ----------
   const go = (screen: Screen) => {
@@ -230,10 +252,17 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
       }
       hydratedRef.current = true;
     });
+    // Вітальний п'єдестал відділів — при кожному вході (якщо рейтинг увімкнено).
+    if (showLeaderboard) {
+      setPodiumRows([]);
+      setPodiumOpen(true);
+    }
   };
   const logout = () => {
     hydratedRef.current = false;
     setLoginDept(null);
+    setPodiumOpen(false);
+    setPodiumRows([]);
     set({ screen: "login", user: null });
     setEngine(null);
     scrollTop();
@@ -1196,21 +1225,22 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
       return { icon: earned ? b.icon : "fa-solid fa-lock", name: b.name, desc: b.desc, cardStyle, iconWrap, textColor: earned ? "" : "color:#a7b6b1;" };
     });
 
-    // Рейтинг — із сервера (/api/leaderboard). Власний рядок показуємо з «живим»
-    // XP, щоб число співпадало зі станом навіть до того, як збереження долетіло.
-    const patched = lbRows.map((r) => (s.user && r.id === s.user.id ? { ...r, xp: s.xp } : r));
-    patched.sort((a, b) => (lbSort === "name" ? a.name.localeCompare(b.name, "uk") : b.xp - a.xp));
-    const medal = lbSort === "xp" && !lbDept; // медалі 1-2-3 лише в загальному топі
-    const leaderboard = patched.map((l, i) => {
+    // Рейтинг — із сервера (/api/leaderboard). У режимі «учасники» власний рядок показуємо
+    // з «живим» XP, щоб число співпадало зі станом навіть до того, як збереження долетіло.
+    const dept = lbView === "dept";
+    const patched = dept ? lbRows : lbRows.map((r) => (s.user && r.id === s.user.id ? { ...r, xp: s.xp } : r));
+    const sorted = [...patched].sort((a, b) => (!dept && lbSort === "name" ? a.name.localeCompare(b.name, "uk") : b.xp - a.xp));
+    const medal = dept || (lbSort === "xp" && !lbDept); // медалі 1-2-3: рейтинг відділів або загальний топ
+    const leaderboard = sorted.map((l, i) => {
       const rk = i + 1;
-      const you = s.user?.id === l.id;
+      const you = !dept && s.user?.id === l.id;
       const rowStyle = "display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid #eef3f1;" + (you ? "background:#eafaf7;" : "");
       let rankStyle = "display:grid;place-items:center;width:30px;height:30px;border-radius:10px;font-weight:800;font-size:14px;";
       if (medal && rk === 1) rankStyle += "background:#ffd76a;color:#8a6a10;";
       else if (medal && rk === 2) rankStyle += "background:#dbe3e0;color:#5b6d68;";
       else if (medal && rk === 3) rankStyle += "background:#e6c48a;color:#7a5a1e;";
       else rankStyle += "background:#eef3f1;color:#8b9c97;";
-      return { rank: rk, name: you ? l.name + " (ви)" : l.name, department: l.department, initials: l.initials, color: l.color, xp: l.xp, rowStyle, rankStyle };
+      return { rank: rk, name: you ? l.name + " (ви)" : l.name, department: l.department, initials: l.initials, color: l.color, xp: l.xp, xpLabel: dept ? "сер. XP" : "", rowStyle, rankStyle };
     });
 
     return (
@@ -1272,38 +1302,54 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
         {showLeaderboard && (
           <>
             <div style={sx("display:flex;align-items:center;gap:12px;margin:28px 0 14px;flex-wrap:wrap")}>
-              <h2 className="disp" style={sx("font-size:22px;font-weight:800;margin:0;flex:1;min-width:160px")}>Рейтинг команди</h2>
-              {/* Фільтр за відділом. «» = топ-10 без фільтра. */}
-              <label style={sx("display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#5b6d68")}>
-                <Icon name="fa-solid fa-filter" style={sx("color:#7c6ee0")} />
-                <select
-                  value={lbDept}
-                  onChange={(e) => setLbDept(e.target.value)}
-                  style={sx("border:none;background:#fff;border-radius:12px;padding:9px 12px;font-weight:800;color:#0f9c8c;cursor:pointer;outline:none;box-shadow:inset 0 -3px 6px rgba(17,74,68,.05),inset 0 3px 5px rgba(255,255,255,.9),0 5px 12px -8px rgba(17,74,68,.2);font-size:13px")}
-                >
-                  <option value="">Топ-10 (усі)</option>
-                  {DEPARTMENTS.map((d) => (
-                    <option key={d.key} value={d.key}>{d.name}</option>
-                  ))}
-                </select>
-              </label>
-              {/* Сортування: за XP (рейтинг) або за іменем. */}
+              <h2 className="disp" style={sx("font-size:22px;font-weight:800;margin:0;flex:1;min-width:160px")}>{lbView === "dept" ? "Рейтинг відділів" : "Рейтинг команди"}</h2>
+              {/* Режим рейтингу: окремі учасники або зведення за відділами (середній XP на учасника). */}
               <div style={sx("display:inline-flex;gap:4px;padding:4px;border-radius:13px;background:#dde6e2;box-shadow:inset 0 2px 5px rgba(17,74,68,.1)")}>
-                {([["xp", "За XP"], ["name", "За іменем"]] as const).map(([key, label]) => {
-                  const on = lbSort === key;
+                {([["people", "Учасники"], ["dept", "Відділи"]] as const).map(([key, label]) => {
+                  const on = lbView === key;
                   const seg = "padding:7px 13px;border:none;cursor:pointer;border-radius:10px;font-weight:800;font-size:12.5px;transition:all .15s;";
                   return (
-                    <button key={key} onClick={() => setLbSort(key)} style={sx(on ? seg + "color:#0d7d70;background:#fff;box-shadow:0 5px 11px -6px rgba(17,74,68,.28);" : seg + "color:#7d8f8a;background:transparent;")}>{label}</button>
+                    <button key={key} onClick={() => setLbView(key)} style={sx(on ? seg + "color:#0d7d70;background:#fff;box-shadow:0 5px 11px -6px rgba(17,74,68,.28);" : seg + "color:#7d8f8a;background:transparent;")}>{label}</button>
                   );
                 })}
               </div>
+              {lbView === "people" && (
+                <>
+                  {/* Фільтр за відділом. «» = топ-10 без фільтра. */}
+                  <label style={sx("display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#5b6d68")}>
+                    <Icon name="fa-solid fa-filter" style={sx("color:#7c6ee0")} />
+                    <select
+                      value={lbDept}
+                      onChange={(e) => setLbDept(e.target.value)}
+                      style={sx("border:none;background:#fff;border-radius:12px;padding:9px 12px;font-weight:800;color:#0f9c8c;cursor:pointer;outline:none;box-shadow:inset 0 -3px 6px rgba(17,74,68,.05),inset 0 3px 5px rgba(255,255,255,.9),0 5px 12px -8px rgba(17,74,68,.2);font-size:13px")}
+                    >
+                      <option value="">Топ-10 (усі)</option>
+                      {DEPARTMENTS.map((d) => (
+                        <option key={d.key} value={d.key}>{d.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  {/* Сортування: за XP (рейтинг) або за іменем. */}
+                  <div style={sx("display:inline-flex;gap:4px;padding:4px;border-radius:13px;background:#dde6e2;box-shadow:inset 0 2px 5px rgba(17,74,68,.1)")}>
+                    {([["xp", "За XP"], ["name", "За іменем"]] as const).map(([key, label]) => {
+                      const on = lbSort === key;
+                      const seg = "padding:7px 13px;border:none;cursor:pointer;border-radius:10px;font-weight:800;font-size:12.5px;transition:all .15s;";
+                      return (
+                        <button key={key} onClick={() => setLbSort(key)} style={sx(on ? seg + "color:#0d7d70;background:#fff;box-shadow:0 5px 11px -6px rgba(17,74,68,.28);" : seg + "color:#7d8f8a;background:transparent;")}>{label}</button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
             <div style={sx("border-radius:24px;background:#fff;overflow:hidden;box-shadow:0 14px 32px -18px rgba(17,74,68,.3),inset 0 -5px 11px rgba(17,74,68,.045),inset 0 6px 11px rgba(255,255,255,.9)")}>
               {lbLoading && leaderboard.length === 0 ? (
                 <div style={sx("padding:26px 20px;text-align:center;color:#8b9c97;font-weight:700")}>Завантаження рейтингу…</div>
               ) : leaderboard.length === 0 ? (
                 <div style={sx("padding:26px 20px;text-align:center;color:#8b9c97;font-weight:700")}>
-                  {lbDept ? "У цьому відділі ще немає учасників." : "Рейтинг зʼявиться, щойно хтось почне навчання."}
+                  {lbView === "dept"
+                    ? "Рейтинг відділів зʼявиться, щойно хтось почне навчання."
+                    : lbDept ? "У цьому відділі ще немає учасників." : "Рейтинг зʼявиться, щойно хтось почне навчання."}
                 </div>
               ) : (
                 leaderboard.map((l, i) => (
@@ -1316,8 +1362,9 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
                       <span style={sx("font-weight:800;font-size:15px")}>{l.name}</span>
                       <span style={sx("font-size:12px;color:#8b9c97;font-weight:700")}>{l.department}</span>
                     </span>
-                    <span style={sx("margin-left:auto;font-weight:800;color:#14b8a6;flex:none")}>
+                    <span style={sx("margin-left:auto;font-weight:800;color:#14b8a6;flex:none;display:inline-flex;align-items:baseline;gap:5px")}>
                       <Icon name="fa-solid fa-bolt" style={sx("font-size:13px")} /> {l.xp}
+                      {l.xpLabel && <span style={sx("font-size:11px;color:#8b9c97;font-weight:700")}>{l.xpLabel}</span>}
                     </span>
                   </div>
                 ))
@@ -1326,6 +1373,83 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
           </>
         )}
       </main>
+    );
+  };
+
+  // Вітальне вікно-п'єдестал: топ-3 відділи як спортивний подіум
+  // (1 місце — золото, 2 — срібло, 3 — бронза). Сходинка й кубок — у колір місця.
+  const Podium = () => {
+    // Налаштування місць: іконка-кубок/медаль, кольори сходинки та підсвітки, висота.
+    const P: Record<number, { icon: string; iconColor: string; step: string; stepText: string; ring: string; h: number; label: string }> = {
+      1: { icon: "fa-solid fa-trophy", iconColor: "#f2b705", step: "linear-gradient(180deg,#ffe28c,#f2b705)", stepText: "#7a5a10", ring: "#f2b705", h: 132, label: "1 місце" },
+      2: { icon: "fa-solid fa-medal", iconColor: "#aab4bd", step: "linear-gradient(180deg,#eef2f4,#bcc6ce)", stepText: "#54636b", ring: "#bcc6ce", h: 100, label: "2 місце" },
+      3: { icon: "fa-solid fa-medal", iconColor: "#c9803f", step: "linear-gradient(180deg,#e8bd8c,#c9803f)", stepText: "#6e4320", ring: "#c9803f", h: 78, label: "3 місце" },
+    };
+    // Порядок колонок класичного подіуму: 2-е ліворуч, 1-е в центрі, 3-є праворуч.
+    const order = [
+      { row: podiumRows[1], rank: 2, delay: 0 },
+      { row: podiumRows[0], rank: 1, delay: 0.12 },
+      { row: podiumRows[2], rank: 3, delay: 0.06 },
+    ].filter((c) => c.row);
+
+    return (
+      <div
+        onClick={() => setPodiumOpen(false)}
+        style={sx("position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:24px;background:rgba(9,32,29,.55);backdrop-filter:blur(6px);animation:floatUp .25s ease")}
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={sx("position:relative;width:100%;max-width:600px;background:#f4f8f6;border-radius:28px;padding:26px 26px 30px;box-shadow:0 30px 70px -24px rgba(9,32,29,.6),inset 0 -5px 11px rgba(17,74,68,.05),inset 0 6px 11px rgba(255,255,255,.9);animation:popIn .4s ease")}
+        >
+          <button
+            type="button"
+            onClick={() => setPodiumOpen(false)}
+            aria-label="Закрити"
+            style={sx("position:absolute;top:16px;right:16px;width:34px;height:34px;border:none;cursor:pointer;border-radius:12px;background:#e6ece9;color:#5b6d68;font-size:15px;display:grid;place-items:center;box-shadow:inset 0 -3px 6px rgba(17,74,68,.06),inset 0 3px 5px rgba(255,255,255,.8)")}
+          >
+            <Icon name="fa-solid fa-xmark" />
+          </button>
+
+          <div style={sx("text-align:center;margin-bottom:6px")}>
+            <span style={sx("display:inline-grid;place-items:center;width:56px;height:56px;border-radius:18px;background:#14b8a6;color:#fff;font-size:26px;box-shadow:0 12px 22px -8px rgba(20,184,166,.6),inset 0 -4px 8px rgba(6,95,85,.35),inset 0 4px 7px rgba(255,255,255,.3);animation:bob 2.4s ease-in-out infinite")}>
+              <Icon name="fa-solid fa-trophy" />
+            </span>
+            <h2 className="disp" style={sx("font-size:24px;font-weight:800;margin:12px 0 2px")}>Рейтинг відділів</h2>
+            <div style={sx("color:#8b9c97;font-weight:700;font-size:13px")}>Змагання за середнім XP на учасника</div>
+          </div>
+
+          <div style={sx("display:flex;align-items:flex-end;justify-content:center;gap:12px;margin:22px 0 8px")}>
+            {order.map(({ row, rank, delay }) => {
+              const cfg = P[rank];
+              const you = !!s.user && row!.deptKey === s.user.deptKey;
+              return (
+                <div key={rank} style={sx("display:flex;flex-direction:column;align-items:center;width:32%;max-width:170px")}>
+                  <Icon name={cfg.icon} style={sx(`font-size:${rank === 1 ? 40 : 30}px;color:${cfg.iconColor};filter:drop-shadow(0 6px 10px rgba(9,32,29,.25));animation:bob 2.6s ease-in-out infinite;animation-delay:${delay}s`)} />
+                  <span style={sx(`display:grid;place-items:center;width:${rank === 1 ? 58 : 48}px;height:${rank === 1 ? 58 : 48}px;margin-top:10px;border-radius:50%;font-weight:800;color:#fff;font-size:${rank === 1 ? 18 : 15}px;background:${row!.color};box-shadow:0 0 0 3px ${you ? cfg.ring : "transparent"},inset 0 -3px 6px rgba(0,0,0,.08),inset 0 3px 5px rgba(255,255,255,.4)`)}>
+                    {row!.initials}
+                  </span>
+                  <div style={sx("margin-top:8px;font-weight:800;font-size:13.5px;text-align:center;line-height:1.2")}>{row!.name}</div>
+                  <div style={sx("font-size:12px;color:#14b8a6;font-weight:800;margin-top:2px")}>
+                    <Icon name="fa-solid fa-bolt" style={sx("font-size:11px")} /> {row!.xp} <span style={sx("color:#8b9c97;font-weight:700")}>сер. XP</span>
+                  </div>
+                  {you && <div style={sx(`margin-top:4px;font-size:10.5px;font-weight:800;color:${cfg.stepText};background:${cfg.ring};padding:2px 8px;border-radius:8px`)}>ваш відділ</div>}
+                  <div style={sx(`margin-top:10px;width:100%;height:${cfg.h}px;border-radius:14px 14px 6px 6px;background:${cfg.step};display:grid;place-items:center;transform-origin:bottom;box-shadow:inset 0 -6px 12px rgba(0,0,0,.12),inset 0 4px 8px rgba(255,255,255,.45);animation:stepGrow .5s cubic-bezier(.2,.8,.25,1) both;animation-delay:${delay + 0.1}s`)}>
+                    <span className="disp" style={sx(`font-size:${rank === 1 ? 44 : 34}px;font-weight:800;color:${cfg.stepText}`)}>{rank}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setPodiumOpen(false)}
+            style={sx("display:block;width:100%;margin-top:18px;padding:14px;border:none;cursor:pointer;border-radius:16px;background:#14b8a6;color:#fff;font-weight:800;font-size:15px;box-shadow:0 12px 24px -10px rgba(20,184,166,.7),inset 0 -4px 8px rgba(6,95,85,.35),inset 0 4px 7px rgba(255,255,255,.25)")}
+          >
+            До навчання
+          </button>
+        </div>
+      </div>
     );
   };
 
@@ -1342,6 +1466,7 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
       {s.screen === "lesson" && Lesson()}
       {s.screen === "quiz" && Quiz()}
       {s.screen === "progress" && Progress()}
+      {showLeaderboard && podiumOpen && podiumRows.length >= 3 && Podium()}
     </div>
   );
 }
