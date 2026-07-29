@@ -12,9 +12,12 @@ import {
   headCommitOid,
   commitHistory,
   makeBlob,
+  makeCommit,
   readCommit,
+  recordReflog,
   resolveRef,
   treeToFileMap,
+  treeToMap,
 } from "../objects";
 import {
   checkoutBranch,
@@ -25,6 +28,7 @@ import {
   deleteBranch,
   loadTreeIntoWorkdir,
   renameBranch,
+  signature,
   stageFile,
   stagePathspec,
   unstagePath,
@@ -33,7 +37,7 @@ import { computeStatus } from "../status";
 import { treeDiff, unifiedDiff } from "../diff";
 import { computeMerge, isAncestor, mergeBase } from "../merge";
 import { cloneRepo, fetchRemote, pullRemote, pushBranch } from "../remote";
-import { formatLog, formatStatus, firstLine } from "./format";
+import { formatLog, formatStatus, firstLine, graphify } from "./format";
 import { parseFlags } from "../tokenize";
 import type { Ctx } from "./fs";
 
@@ -115,7 +119,7 @@ export function commit(argv: string[], ctx: Ctx): CommandResult {
   const r = requireRepo(ctx.ws);
   if (isResult(r)) return r;
   const { flags, values } = parseFlags(argv, {
-    bool: ["-a", "--all", "-am", "-ma"],
+    bool: ["-a", "--all", "-am", "-ma", "--amend"],
     value: ["-m", "--message"],
   });
   let message = values["-m"] ?? values["--message"] ?? "";
@@ -130,6 +134,29 @@ export function commit(argv: string[], ctx: Ctx): CommandResult {
     for (const p of Object.keys(r.workdir.files)) if (r.index[p]) stageFile(r, p);
     for (const p of Object.keys(r.index)) if (r.workdir.files[p] === undefined) delete r.index[p];
   }
+
+  // --amend: переписати ОСТАННІЙ коміт (нове дерево з індексу + нове/старе повідомлення),
+  // зберігаючи його батьків і початкового автора.
+  if (flags["--amend"]) {
+    const prevOid = headCommitOid(r);
+    const prev = prevOid ? readCommit(r, prevOid) : null;
+    if (!prev) return err("fatal: You have nothing to amend.");
+    const st0 = computeStatus(r);
+    if (st0.conflicts.length) return err("error: Committing is not possible because you have unmerged files.");
+    const msg = message || prev.message;
+    const tree = buildTreeFromIndex(r, r.index);
+    const sig = signature(r, ctx.clock);
+    const oid = makeCommit(r, tree, prev.parents, prev.author, sig, msg);
+    if (r.head.type === "branch") r.branches[r.head.branch] = oid;
+    else r.head = { type: "detached", oid };
+    recordReflog(r, oid, "commit (amend): " + firstLine(msg), sig.when);
+    const branch0 = r.head.type === "branch" ? r.head.branch : "HEAD detached";
+    return ok([
+      { text: `[${branch0} ${short(oid)}] ${firstLine(msg)}`, tone: "out" },
+      { text: ` ${st0.staged.length} file${st0.staged.length === 1 ? "" : "s"} changed${summarize(r, oid)}`, tone: "out" },
+    ]);
+  }
+
   if (!message) return err('Aborting commit due to empty commit message. Use: git commit -m "..."');
 
   const st = computeStatus(r);
@@ -205,7 +232,9 @@ export function log(argv: string[], ctx: Ctx): CommandResult {
   let commits = positional.length ? commitHistory(r, resolveRef(r, positional[0])) : commitHistory(r, head);
   const n = parseInt(values["-n"] ?? values["--max-count"] ?? "", 10);
   if (!isNaN(n)) commits = commits.slice(0, n);
-  return ok(formatLog(r, commits, !!flags["--oneline"]));
+  const oneline = !!flags["--oneline"];
+  const lines = formatLog(r, commits, oneline);
+  return ok(flags["--graph"] ? graphify(lines, oneline) : lines);
 }
 
 // ---------- diff ----------
@@ -437,6 +466,7 @@ export function merge(argv: string[], ctx: Ctx): CommandResult {
   if (res.kind === "ff" && !flags["--no-ff"]) {
     r.branches[r.head.branch] = theirs;
     loadTreeIntoWorkdir(r, commitTree(r, theirs));
+    recordReflog(r, theirs, `merge ${target}: Fast-forward`);
     return ok([
       { text: "Updating " + short(ours) + ".." + short(theirs) },
       { text: "Fast-forward" },
@@ -550,6 +580,8 @@ export function reset(argv: string[], ctx: Ctx): CommandResult {
   if (!oid) return err("fatal: ambiguous argument '" + target + "'");
   if (r.head.type === "branch") r.branches[r.head.branch] = oid;
   else r.head = { type: "detached", oid };
+  const mode = flags["--hard"] ? "hard" : flags["--soft"] ? "soft" : "mixed";
+  recordReflog(r, oid, `reset: moving to ${target}` + (mode === "hard" ? " (hard)" : ""));
   if (flags["--hard"]) {
     loadTreeIntoWorkdir(r, commitTree(r, oid));
   } else {
@@ -565,19 +597,49 @@ export function reset(argv: string[], ctx: Ctx): CommandResult {
 }
 
 // ---------- stash ----------
+/** Парсить "stash@{n}" -> n (default 0). */
+function parseStashIndex(ref: string | undefined): number {
+  if (!ref) return 0;
+  const m = ref.match(/stash@\{(\d+)\}/);
+  if (m) return parseInt(m[1], 10);
+  const n = parseInt(ref, 10);
+  return isNaN(n) ? 0 : n;
+}
 export function stash(argv: string[], ctx: Ctx): CommandResult {
   const r = requireRepo(ctx.ws);
   if (isResult(r)) return r;
-  const sub = argv[0] ?? "push";
+  let sub = argv[0] ?? "push";
+  // "git stash" без аргументів == "git stash push"; "git stash save <msg>" — старий синонім.
+  if (sub.startsWith("-")) sub = "push";
+
   if (sub === "list") {
+    if (!r.stash.length) return ok([]);
     return ok(r.stash.map((s, i) => ({ text: `stash@{${i}}: ${s.message}` })));
+  }
+  if (sub === "clear") {
+    r.stash = [];
+    return ok([]);
+  }
+  if (sub === "drop") {
+    if (!r.stash.length) return err("No stash entries found.");
+    const idx = parseStashIndex(argv[1]);
+    if (idx < 0 || idx >= r.stash.length) return err("fatal: log for 'stash' only has " + r.stash.length + " entries");
+    const removed = r.stash.splice(idx, 1)[0];
+    return ok([{ text: `Dropped stash@{${idx}} (${removed.message})` }]);
   }
   if (sub === "pop" || sub === "apply") {
     if (!r.stash.length) return err("No stash entries found.");
-    const entry = r.stash[0];
+    const idx = parseStashIndex(argv[1]);
+    if (idx < 0 || idx >= r.stash.length) return err("fatal: log for 'stash' only has " + r.stash.length + " entries");
+    const entry = r.stash[idx];
+    // відновлюємо і робочу директорію, і індекс (staged-стан)
     r.workdir.files = { ...treeToFileMap(r, entry.workTree) };
-    if (sub === "pop") r.stash.shift();
-    return ok([{ text: "On branch " + (r.head.type === "branch" ? r.head.branch : "?") }, { text: "Changes restored from stash." }]);
+    const idxMap = treeToMap(r, entry.indexTree);
+    r.index = {};
+    for (const p of Object.keys(idxMap)) r.index[p] = { path: p, oid: idxMap[p], mode: "100644" };
+    if (sub === "pop") r.stash.splice(idx, 1);
+    const out = formatStatus(r, computeStatus(r));
+    return ok([...out, { text: (sub === "pop" ? `Dropped stash@{${idx}}` : "Applied stash@{" + idx + "}"), tone: "meta" }]);
   }
   // push (default)
   const st = computeStatus(r);
@@ -707,6 +769,228 @@ export function config(argv: string[], ctx: Ctx): CommandResult {
   return ok([]);
 }
 
+// ---------- tag ----------
+export function tag(argv: string[], ctx: Ctx): CommandResult {
+  const r = requireRepo(ctx.ws);
+  if (isResult(r)) return r;
+  const { flags, values, positional } = parseFlags(argv, {
+    bool: ["-d", "--delete", "-l", "--list", "-a", "-f", "--force"],
+    value: ["-m", "--message"],
+  });
+  void values;
+  if (flags["-d"] || flags["--delete"]) {
+    const name = positional[0];
+    if (!name) return err("fatal: tag name required");
+    if (r.tags[name] === undefined) return err("error: tag '" + name + "' not found.");
+    const was = r.tags[name];
+    delete r.tags[name];
+    return ok([{ text: `Deleted tag '${name}' (was ${short(was)})` }]);
+  }
+  // список тегів
+  if (flags["-l"] || flags["--list"] || positional.length === 0) {
+    return ok(Object.keys(r.tags).sort().map((n) => ({ text: n })));
+  }
+  const name = positional[0];
+  if (r.tags[name] !== undefined && !(flags["-f"] || flags["--force"]))
+    return err("fatal: tag '" + name + "' already exists");
+  const refArg = positional[1];
+  const target = refArg ? resolveRef(r, refArg) : headCommitOid(r);
+  if (!target) return err("fatal: Failed to resolve '" + (refArg ?? "HEAD") + "' as a valid ref.");
+  r.tags[name] = target;
+  return ok([]);
+}
+
+// ---------- show ----------
+export function show(argv: string[], ctx: Ctx): CommandResult {
+  const r = requireRepo(ctx.ws);
+  if (isResult(r)) return r;
+  const { positional } = parseFlags(argv, { bool: ["--stat"] });
+  const ref = positional[0] ?? "HEAD";
+  const oid = resolveRef(r, ref);
+  if (!oid) return err("fatal: bad revision '" + ref + "'");
+  const c = readCommit(r, oid);
+  if (!c) return err("fatal: bad object " + ref);
+  const out: CommandResult["lines"] = [{ text: "commit " + oid, tone: "warn" }];
+  if (c.parents.length > 1) out.push({ text: "Merge: " + c.parents.map((p) => short(p)).join(" "), tone: "meta" });
+  out.push({ text: "Author: " + c.author.name + " <" + c.author.email + ">", tone: "out" });
+  out.push({ text: "Date:   " + new Date(c.committer.when).toISOString(), tone: "out" });
+  out.push({ text: "" });
+  for (const line of c.message.split("\n")) out.push({ text: "    " + line, tone: "out" });
+  out.push({ text: "" });
+  const parentTree = c.parents[0] ? commitTree(r, c.parents[0]) : null;
+  for (const ch of treeDiff(r, parentTree, c.tree)) {
+    out.push(...unifiedDiff(ch.path, ch.oldText, ch.newText));
+  }
+  return ok(out);
+}
+
+// ---------- restore ----------
+export function restore(argv: string[], ctx: Ctx): CommandResult {
+  const r = requireRepo(ctx.ws);
+  if (isResult(r)) return r;
+  const { flags, values, positional } = parseFlags(argv, {
+    bool: ["--staged", "-S", "--worktree", "-W"],
+    value: ["--source", "-s"],
+  });
+  const files = positional;
+  if (!files.length) return err("fatal: you must specify path(s) to restore");
+  const staged = flags["--staged"] || flags["-S"];
+  const worktree = flags["--worktree"] || flags["-W"] || !staged; // за замовчуванням — робоча тека
+  const source = values["--source"] ?? values["-s"];
+  let srcMap: Record<string, string> | null = null;
+  if (source) {
+    const soid = resolveRef(r, source);
+    if (!soid) return err("fatal: could not resolve --source=" + source);
+    srcMap = treeToFileMap(r, commitTree(r, soid));
+  }
+  for (const f of files) {
+    const rel = toRepoRel(r, P.resolve(ctx.ws.cwd, f));
+    if (staged) unstagePath(r, rel); // index -> HEAD
+    if (worktree) {
+      if (srcMap) {
+        if (srcMap[rel] !== undefined) r.workdir.files[rel] = srcMap[rel];
+        else delete r.workdir.files[rel];
+      } else {
+        restoreFiles(r, ctx.ws, [f]); // з індексу (або HEAD)
+      }
+    }
+  }
+  return ok([]);
+}
+
+// ---------- revert ----------
+export function revert(argv: string[], ctx: Ctx): CommandResult {
+  const r = requireRepo(ctx.ws);
+  if (isResult(r)) return r;
+  const { flags, positional } = parseFlags(argv, { bool: ["--no-commit", "-n", "--no-edit"] });
+  const ref = positional[0];
+  if (!ref) return err("fatal: empty commit set passed");
+  const oid = resolveRef(r, ref);
+  if (!oid) return err("fatal: bad revision '" + ref + "'");
+  const c = readCommit(r, oid);
+  if (!c) return err("fatal: bad object " + ref);
+  if (c.parents.length > 1) return err("error: commit " + short(oid) + " is a merge but no -m option was given.");
+  if (r.head.type !== "branch") return err("fatal: not on a branch");
+
+  const parentTree = c.parents[0] ? commitTree(r, c.parents[0]) : null;
+  const changes = treeDiff(r, parentTree, c.tree);
+  const files = { ...treeToFileMap(r, commitTree(r, headCommitOid(r))) };
+  for (const ch of changes) {
+    // застосовуємо ЗВОРОТНЄ до того, що зробив коміт
+    if (ch.status === "added") delete files[ch.path];
+    else files[ch.path] = ch.oldText ?? "";
+  }
+  r.workdir.files = { ...files };
+  r.index = {};
+  for (const p of Object.keys(files)) stageFile(r, p);
+  const subject = firstLine(c.message);
+  if (flags["--no-commit"] || flags["-n"]) {
+    return ok([{ text: 'Revert "' + subject + '" — зміни підготовлено, зробіть git commit.', tone: "meta" }]);
+  }
+  const msg = 'Revert "' + subject + '"\n\nThis reverts commit ' + oid + ".";
+  const newOid = createCommit(r, msg, ctx.clock);
+  return ok([
+    { text: `[${r.head.type === "branch" ? r.head.branch : "?"} ${short(newOid)}] Revert "${subject}"`, tone: "out" },
+  ]);
+}
+
+// ---------- cherry-pick ----------
+export function cherryPick(argv: string[], ctx: Ctx): CommandResult {
+  const r = requireRepo(ctx.ws);
+  if (isResult(r)) return r;
+  const { positional } = parseFlags(argv, { bool: ["-x", "--no-commit", "-n"] });
+  const ref = positional[0];
+  if (!ref) return err("fatal: empty commit set passed");
+  const oid = resolveRef(r, ref);
+  if (!oid) return err("fatal: bad revision '" + ref + "'");
+  const c = readCommit(r, oid);
+  if (!c) return err("fatal: bad object " + ref);
+  if (r.head.type !== "branch") return err("fatal: not on a branch");
+
+  const parentTree = c.parents[0] ? commitTree(r, c.parents[0]) : null;
+  const changes = treeDiff(r, parentTree, c.tree);
+  const files = { ...treeToFileMap(r, commitTree(r, headCommitOid(r))) };
+  for (const ch of changes) {
+    if (ch.status === "deleted") delete files[ch.path];
+    else files[ch.path] = ch.newText ?? "";
+  }
+  r.workdir.files = { ...files };
+  r.index = {};
+  for (const p of Object.keys(files)) stageFile(r, p);
+  const newOid = createCommit(r, c.message, ctx.clock);
+  return ok([
+    { text: `[${r.head.branch} ${short(newOid)}] ${firstLine(c.message)}`, tone: "out" },
+  ]);
+}
+
+// ---------- rm ----------
+export function rmCmd(argv: string[], ctx: Ctx): CommandResult {
+  const r = requireRepo(ctx.ws);
+  if (isResult(r)) return r;
+  const { flags, positional } = parseFlags(argv, { bool: ["-r", "--cached", "-f", "--force"] });
+  if (!positional.length) return err("fatal: No pathspec was given. Which files should I remove?");
+  const cached = flags["--cached"];
+  const out: CommandResult["lines"] = [];
+  for (const spec of positional) {
+    const rel = toRepoRel(r, P.resolve(ctx.ws.cwd, spec));
+    const prefix = rel + "/";
+    const matched = Object.keys(r.workdir.files).filter((p) => p === rel || (flags["-r"] && p.startsWith(prefix)));
+    // також файли, що є лише в індексі
+    for (const p of Object.keys(r.index)) if ((p === rel || (flags["-r"] && p.startsWith(prefix))) && !matched.includes(p)) matched.push(p);
+    if (!matched.length) return err("fatal: pathspec '" + spec + "' did not match any files");
+    for (const p of matched.sort()) {
+      delete r.index[p];
+      if (!cached) delete r.workdir.files[p];
+      out.push({ text: "rm '" + p + "'" });
+    }
+  }
+  return ok(out);
+}
+
+// ---------- clean ----------
+export function clean(argv: string[], ctx: Ctx): CommandResult {
+  const r = requireRepo(ctx.ws);
+  if (isResult(r)) return r;
+  const { flags } = parseFlags(argv, { bool: ["-n", "--dry-run", "-f", "--force", "-d"] });
+  const dry = flags["-n"] || flags["--dry-run"];
+  const force = flags["-f"] || flags["--force"];
+  if (!dry && !force) {
+    return err("fatal: clean.requireForce defaults to true and neither -f nor -n given; refusing to clean");
+  }
+  const st = computeStatus(r);
+  const out: CommandResult["lines"] = [];
+  for (const p of st.untracked) {
+    if (dry) out.push({ text: "Would remove " + p });
+    else {
+      delete r.workdir.files[p];
+      out.push({ text: "Removing " + p });
+    }
+  }
+  if (flags["-d"]) {
+    for (const d of r.workdir.dirs.slice()) {
+      if (dry) out.push({ text: "Would remove " + d + "/" });
+      else {
+        r.workdir.dirs = r.workdir.dirs.filter((x) => x !== d);
+        out.push({ text: "Removing " + d + "/" });
+      }
+    }
+  }
+  return ok(out);
+}
+
+// ---------- reflog ----------
+export function reflog(argv: string[], ctx: Ctx): CommandResult {
+  const r = requireRepo(ctx.ws);
+  if (isResult(r)) return r;
+  const entries = r.reflog ?? [];
+  if (!entries.length) {
+    const h = headCommitOid(r);
+    if (h) return ok([{ text: `${short(h)} HEAD@{0}: commit: ${firstLine(readCommit(r, h)?.message ?? "")}`, tone: "meta" }]);
+    return ok([]);
+  }
+  return ok(entries.map((e, i) => ({ text: `${short(e.oid)} HEAD@{${i}}: ${e.message}`, tone: "meta" })));
+}
+
 // ---------- реєстр ----------
 export const GIT: Record<string, (argv: string[], ctx: Ctx) => CommandResult> = {
   init,
@@ -728,4 +1012,12 @@ export const GIT: Record<string, (argv: string[], ctx: Ctx) => CommandResult> = 
   fetch,
   clone,
   config,
+  tag,
+  show,
+  restore,
+  revert,
+  "cherry-pick": cherryPick,
+  rm: rmCmd,
+  clean,
+  reflog,
 };

@@ -64,6 +64,12 @@ export interface StashEntry {
   indexTree: Oid; // знімок дерева індексу
 }
 
+export interface ReflogEntry {
+  oid: Oid; // куди став HEAD після операції
+  message: string; // напр. "commit: ...", "checkout: moving from main to dev", "reset: ..."
+  when: number;
+}
+
 export interface Remote {
   name: string;
   url: string; // "workspace://<id>"
@@ -139,6 +145,8 @@ export interface Repo {
   // Стан незавершеного злиття (конфлікт) — щоб git status / commit це бачили.
   mergeHead?: Oid;
   mergeMessage?: string;
+  // Журнал переміщень HEAD (git reflog). Опційне — старі збережені стани його не мають.
+  reflog?: ReflogEntry[];
 }
 
 export interface Workspace {

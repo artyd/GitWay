@@ -8,12 +8,44 @@ import * as V from "./vfs";
 import { FS } from "./commands";
 
 const FS_CMDS = Object.keys(FS).concat(["git", "clear", "help", "whoami"]);
+// Тримати синхронно з реєстром GIT у commands/git.ts.
 const GIT_SUBS = [
   "init", "add", "commit", "status", "log", "diff", "branch", "checkout",
   "switch", "merge", "rebase", "reset", "stash", "remote", "push", "pull", "fetch", "clone", "config",
+  "tag", "show", "restore", "revert", "cherry-pick", "rm", "clean", "reflog",
 ];
-const BRANCH_CONSUMERS = new Set(["checkout", "switch", "merge", "rebase", "branch"]);
+// Підкоманди, що приймають назву гілки/коміта/тега.
+const BRANCH_CONSUMERS = new Set([
+  "checkout", "switch", "merge", "rebase", "branch", "reset", "revert",
+  "cherry-pick", "show", "tag", "log", "diff",
+]);
 const REMOTE_CONSUMERS = new Set(["push", "pull", "fetch"]);
+
+// Прапорці для автодоповнення (найпоширеніші для кожної підкоманди).
+const GIT_FLAGS: Record<string, string[]> = {
+  add: ["-A", "--all"],
+  commit: ["-m", "-a", "-am", "--amend", "--message"],
+  status: ["-s", "--short"],
+  log: ["--oneline", "--graph", "--all", "-n", "--max-count"],
+  diff: ["--staged", "--cached", "--stat"],
+  branch: ["-a", "--all", "-v", "-d", "-D", "--delete", "-m", "-M"],
+  checkout: ["-b", "-B", "--"],
+  switch: ["-c", "-C"],
+  merge: ["--no-ff", "--abort"],
+  rebase: ["--abort", "--continue"],
+  reset: ["--hard", "--soft", "--mixed"],
+  stash: ["push", "pop", "apply", "list", "drop", "clear"],
+  remote: ["add", "remove", "-v"],
+  push: ["-u", "--set-upstream", "-f", "--force"],
+  tag: ["-a", "-d", "--delete", "-m", "-l", "--list", "-f"],
+  restore: ["--staged", "--worktree", "--source"],
+  revert: ["--no-commit", "--no-edit"],
+  "cherry-pick": ["-x", "--no-commit"],
+  rm: ["-r", "--cached", "-f"],
+  clean: ["-n", "--dry-run", "-f", "--force", "-d"],
+  reflog: ["show"],
+  config: ["--global", "--local", "--list", "user.name", "user.email"],
+};
 
 export interface Completion {
   replaceFrom: number; // індекс у рядку, з якого замінюємо
@@ -40,10 +72,15 @@ export function complete(line: string, cursor: number, ws: Workspace): Completio
     } else {
       const sub = tokens[1];
       const repo = currentRepo(ws);
-      if (repo && BRANCH_CONSUMERS.has(sub)) {
-        const branches = Object.keys(repo.branches).concat(Object.keys(repo.remoteBranches));
-        candidates = branches.filter((b) => b.startsWith(partial));
-        // також шляхи (напр. git checkout -- file)
+      if (partial.startsWith("-") || (GIT_FLAGS[sub] && wordIdx === 2 && partial === "")) {
+        // прапорці / підкоманди підкоманди (напр. git stash <TAB>)
+        candidates = (GIT_FLAGS[sub] ?? []).filter((f) => f.startsWith(partial));
+        if (!partial.startsWith("-") && repo && BRANCH_CONSUMERS.has(sub)) {
+          candidates = candidates.concat(refNames(repo).filter((b) => b.startsWith(partial)));
+        }
+      } else if (repo && BRANCH_CONSUMERS.has(sub)) {
+        candidates = refNames(repo).filter((b) => b.startsWith(partial));
+        // також шляхи (напр. git checkout -- file, git reset <file>)
         candidates = candidates.concat(pathCandidates(ws, partial));
       } else if (repo && REMOTE_CONSUMERS.has(sub) && wordIdx === 2) {
         candidates = Object.keys(repo.remotes).filter((rm) => rm.startsWith(partial));
@@ -57,6 +94,12 @@ export function complete(line: string, cursor: number, ws: Workspace): Completio
 
   candidates = Array.from(new Set(candidates)).sort();
   return { replaceFrom, candidates, commonPrefix: longestCommonPrefix(candidates, partial) };
+}
+
+function refNames(repo: import("./types").Repo): string[] {
+  return Object.keys(repo.branches)
+    .concat(Object.keys(repo.remoteBranches))
+    .concat(Object.keys(repo.tags));
 }
 
 function pathCandidates(ws: Workspace, partial: string): string[] {

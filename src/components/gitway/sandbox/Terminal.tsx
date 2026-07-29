@@ -17,6 +17,8 @@ const DEFAULT_SEED: OutLine[] = [
 ];
 
 type CompleteFn = (line: string, cursor: number) => Completion;
+type HlToken = { text: string; color: string };
+type HighlightFn = (line: string) => HlToken[];
 
 const toneColor: Record<Tone, string> = {
   out: "#c7f0e8",
@@ -46,6 +48,8 @@ export type TerminalProps = {
   promptFor?: (cwd: string) => string;
   titleFor?: (cwd: string) => string;
   complete?: CompleteFn;
+  /** Підсвічування командного рядка «на льоту». Якщо не задано — інпут звичайний. */
+  highlightLine?: HighlightFn;
   historyKey?: string;
 };
 
@@ -56,6 +60,7 @@ export function Terminal({
   promptFor,
   titleFor,
   complete: completeFn,
+  highlightLine,
   historyKey,
 }: TerminalProps) {
   useBackendVersion(backend); // ре-рендер при зміні cwd/стану
@@ -68,6 +73,14 @@ export function Terminal({
   const draft = useRef<string>("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  // Синхронізуємо горизонтальний скрол оверлея підсвітки з інпутом.
+  const syncOverlayScroll = useCallback(() => {
+    if (overlayRef.current && inputRef.current) {
+      overlayRef.current.scrollLeft = inputRef.current.scrollLeft;
+    }
+  }, []);
 
   const histBucket = historyKey ?? account;
   const cwd = backend.cwd();
@@ -97,6 +110,10 @@ export function Terminal({
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [lines]);
+
+  useEffect(() => {
+    requestAnimationFrame(syncOverlayScroll);
+  }, [input, syncOverlayScroll]);
 
   const push = useCallback((newLines: OutLine[]) => {
     setLines((prev) => {
@@ -212,17 +229,38 @@ export function Terminal({
         ))}
         <div style={sx("display:flex;align-items:center;gap:8px;margin-top:2px")}>
           <span style={sx("color:#2dd4bf;font-weight:700;flex:none")}>{prompt}</span>
-          <input
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={onKeyDown}
-            spellCheck={false}
-            autoCapitalize="off"
-            autoComplete="off"
-            aria-label="Командний рядок терміналу"
-            style={sx("flex:1;background:none;border:none;color:#eafaf7;font-family:inherit;font-size:13.5px;outline:none;padding:0")}
-          />
+          <div style={sx("position:relative;flex:1;min-width:0;height:1.65em")}>
+            {highlightLine && (
+              <div
+                ref={overlayRef}
+                aria-hidden
+                data-hl-overlay
+                style={sx(
+                  "position:absolute;inset:0;z-index:0;pointer-events:none;white-space:pre;overflow:hidden;font-family:inherit;font-size:13.5px;line-height:1.65;display:flex;align-items:center",
+                )}
+              >
+                {highlightLine(input).map((t, i) => (
+                  <span key={i} style={{ color: t.color, whiteSpace: "pre" }}>
+                    {t.text}
+                  </span>
+                ))}
+              </div>
+            )}
+            <input
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={onKeyDown}
+              onScroll={syncOverlayScroll}
+              spellCheck={false}
+              autoCapitalize="off"
+              autoComplete="off"
+              aria-label="Командний рядок терміналу"
+              style={sx(
+                `position:relative;z-index:1;width:100%;background:none;border:none;font-family:inherit;font-size:13.5px;line-height:1.65;outline:none;padding:0;caret-color:#eafaf7;color:${highlightLine ? "transparent" : "#eafaf7"}`,
+              )}
+            />
+          </div>
         </div>
       </div>
       <div style={sx("display:flex;flex-wrap:wrap;gap:12px;padding:9px 16px;background:#0b201d;border-radius:0 0 16px 16px;color:#6f9089;font-size:11.5px;font-weight:700")}>

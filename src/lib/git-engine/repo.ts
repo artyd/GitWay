@@ -9,9 +9,11 @@ import {
   makeBlob,
   makeCommit,
   readCommit,
+  recordReflog,
   treeToFileMap,
   treeToMap,
 } from "./objects";
+import { short } from "./oid";
 
 export function initRepo(repo: Repo, clock: () => number, defaultBranch = "main"): void {
   repo.initialized = true;
@@ -77,6 +79,8 @@ export function createCommit(repo: Repo, message: string, clock: () => number): 
   const oid = makeCommit(repo, tree, parents, sig, sig, message);
   if (repo.head.type === "branch") repo.branches[repo.head.branch] = oid;
   else repo.head = { type: "detached", oid };
+  const isMerge = parents.length > 1;
+  recordReflog(repo, oid, (isMerge ? "commit (merge): " : parents.length === 0 ? "commit (initial): " : "commit: ") + message.split("\n")[0], sig.when);
   repo.mergeHead = undefined;
   repo.mergeMessage = undefined;
   return oid;
@@ -92,19 +96,28 @@ export function loadTreeIntoWorkdir(repo: Repo, treeOid: Oid | null): void {
   repo.index = index;
 }
 
+/** Опис поточної позиції HEAD для повідомлень reflog. */
+function headLabel(repo: Repo): string {
+  return repo.head.type === "branch" ? repo.head.branch : short(headCommitOid(repo) ?? "");
+}
+
 /** Перемикання на гілку: HEAD -> branch, робоча директорія = дерево вершини. */
 export function checkoutBranch(repo: Repo, branch: string): boolean {
   if (repo.branches[branch] === undefined) return false;
+  const from = headLabel(repo);
   repo.head = { type: "branch", branch };
   loadTreeIntoWorkdir(repo, commitTree(repo, repo.branches[branch]));
+  recordReflog(repo, repo.branches[branch], `checkout: moving from ${from} to ${branch}`);
   return true;
 }
 
 /** Перемикання на конкретний коміт (detached HEAD). */
 export function checkoutCommit(repo: Repo, oid: Oid): boolean {
   if (!readCommit(repo, oid)) return false;
+  const from = headLabel(repo);
   repo.head = { type: "detached", oid };
   loadTreeIntoWorkdir(repo, commitTree(repo, oid));
+  recordReflog(repo, oid, `checkout: moving from ${from} to ${short(oid)}`);
   return true;
 }
 

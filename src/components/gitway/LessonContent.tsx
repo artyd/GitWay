@@ -1,8 +1,8 @@
 "use client";
 
-import { Fragment } from "react";
 import { sx } from "@/lib/sx";
 import { Icon } from "./ui";
+import { renderRich } from "./GlossaryText";
 import type { Lesson } from "@/lib/gitway-data";
 
 /**
@@ -41,7 +41,7 @@ export function LessonContent({ lesson, accent }: { lesson: Lesson; accent: stri
           </span>
           <div>
             <div style={sx(`display:inline-block;font-size:12px;font-weight:800;color:${accent};letter-spacing:.5px;margin-bottom:6px`)}>ПРО ЩО УРОК</div>
-            <p style={sx("margin:0;font-size:16.5px;line-height:1.6;color:#3f524e;text-wrap:pretty")}>{highlight(lead, inlineCmds, accent)}</p>
+            <p style={sx("margin:0;font-size:16.5px;line-height:1.6;color:#3f524e;text-wrap:pretty")}>{renderRich(lead, { cmds: inlineCmds, accent })}</p>
           </div>
         </div>
       )}
@@ -57,7 +57,7 @@ export function LessonContent({ lesson, accent }: { lesson: Lesson; accent: stri
               )}
             >
               <span style={sx(`flex:none;margin-top:7px;width:9px;height:9px;border-radius:3px;background:${accent}`)} />
-              <p style={sx("margin:0;font-size:15.5px;line-height:1.65;color:#3f524e;text-wrap:pretty")}>{highlight(p, inlineCmds, accent)}</p>
+              <p style={sx("margin:0;font-size:15.5px;line-height:1.65;color:#3f524e;text-wrap:pretty")}>{renderRich(p, { cmds: inlineCmds, accent })}</p>
             </div>
           ))}
         </div>
@@ -83,28 +83,5 @@ export function LessonContent({ lesson, accent }: { lesson: Lesson; accent: stri
         </div>
       )}
     </div>
-  );
-}
-
-/** Підсвічує входження команд у тексті як інлайн-код-чипи. */
-function highlight(text: string, cmds: string[], accent: string) {
-  if (!cmds.length) return text;
-  const escaped = cmds.map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  const re = new RegExp("(" + escaped.join("|") + ")", "gi");
-  const parts = text.split(re);
-  const lower = new Set(cmds.map((c) => c.toLowerCase()));
-  return parts.map((part, i) =>
-    lower.has(part.toLowerCase()) ? (
-      <code
-        key={i}
-        style={sx(
-          `font-family:ui-monospace,Menlo,monospace;font-size:13.5px;font-weight:700;color:${accent};background:${accent}14;border-radius:7px;padding:1px 7px;white-space:nowrap`,
-        )}
-      >
-        {part}
-      </code>
-    ) : (
-      <Fragment key={i}>{part}</Fragment>
-    ),
   );
 }

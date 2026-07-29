@@ -7,6 +7,7 @@ import { AudioPlayer } from "./AudioPlayer";
 import { SandboxPanel } from "./sandbox/SandboxPanel";
 import { CliPanel } from "./cli/CliPanel";
 import { LessonContent } from "./LessonContent";
+import { GlossaryText } from "./GlossaryText";
 import { GitEngine } from "@/lib/git-engine/store";
 import { loadWorkspace } from "@/lib/git-engine/persistence";
 import { createSeedWorkspace } from "@/lib/git-engine/seed";
@@ -383,8 +384,11 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
       // Урок зараховуємо і відкриваємо наступний ЛИШЕ якщо всі відповіді правильні.
       const passed = s.correct >= total;
       if (passed) {
-        const gain = activeLesson.xp + s.correct * 20;
-        const done = s.completed.includes(s.activeId) ? s.completed : s.completed.concat([s.activeId]);
+        // Бали нараховуємо РІВНО ОДИН РАЗ. Якщо урок уже пройдено — повторне
+        // проходження балів не приносить (gain = 0), прогрес лишається.
+        const already = s.completed.includes(s.activeId);
+        const gain = already ? 0 : activeLesson.xp + s.correct * 20;
+        const done = already ? s.completed : s.completed.concat([s.activeId]);
         const nextCur = Math.min(TOTAL_LESSONS, Math.max(s.current, s.activeId + 1));
         set({ quizDone: true, earned: gain, xp: s.xp + gain, completed: done, current: nextCur });
       } else {
@@ -932,7 +936,7 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
             </span>
             <div>
               <div style={sx("display:inline-block;font-size:12px;font-weight:800;color:#f2994a;letter-spacing:.5px;margin-bottom:6px")}>АНАЛОГІЯ</div>
-              <p style={sx("margin:0;font-size:16.5px;line-height:1.6;color:#3f524e;text-wrap:pretty;white-space:pre-line")}>{al.analogy}</p>
+              <p style={sx("margin:0;font-size:16.5px;line-height:1.6;color:#3f524e;text-wrap:pretty;white-space:pre-line")}><GlossaryText text={al.analogy} accent={am.color} /></p>
             </div>
           </div>
         )}
@@ -949,10 +953,10 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
                   b.startsWith("• ") ? (
                     <div key={bi} style={sx("display:flex;gap:10px;margin-top:7px")}>
                       <span style={sx("flex:none;margin-top:9px;width:7px;height:7px;border-radius:50%;background:#14b8a6")} />
-                      <span style={sx("font-size:15.5px;line-height:1.55;color:#3f524e")}>{b.slice(2)}</span>
+                      <span style={sx("font-size:15.5px;line-height:1.55;color:#3f524e")}><GlossaryText text={b.slice(2)} accent={am.color} /></span>
                     </div>
                   ) : (
-                    <p key={bi} style={sx("margin:7px 0 0;font-size:15.5px;line-height:1.6;color:#3f524e;text-wrap:pretty")}>{b}</p>
+                    <p key={bi} style={sx("margin:7px 0 0;font-size:15.5px;line-height:1.6;color:#3f524e;text-wrap:pretty")}><GlossaryText text={b} accent={am.color} /></p>
                   ),
                 )}
               </div>
@@ -1182,14 +1186,19 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
             <span style={sx("display:grid;place-items:center;width:110px;height:110px;border-radius:50%;margin:0 auto 22px;font-size:48px;color:#fff;background:#14b8a6;box-shadow:0 22px 40px -14px rgba(20,184,166,.6),inset 0 -7px 14px rgba(6,95,85,.4),inset 0 7px 12px rgba(255,255,255,.35);animation:bob 3.5s ease-in-out infinite")}>
               <Icon name="fa-solid fa-trophy" />
             </span>
-            <h1 className="disp" style={sx("font-size:34px;font-weight:800;margin-bottom:8px")}>Урок завершено!</h1>
+            <h1 className="disp" style={sx("font-size:34px;font-weight:800;margin-bottom:8px")}>{s.earned > 0 ? "Урок завершено!" : "Урок уже пройдено"}</h1>
             <p style={sx("font-size:18px;color:#5b6d68;margin:0 0 26px")}>
               Правильних відповідей: <b style={{ color: "#14b8a6" }}>{s.correct} з {total}</b>
             </p>
+            {s.earned === 0 && (
+              <p style={sx("font-size:15px;color:#8b9c97;margin:-14px auto 24px;max-width:440px;line-height:1.55")}>
+                Ви вже проходили цей урок раніше — бали за нього нараховуються лише один раз, тож повторне проходження їх не додає. Ваш прогрес збережено.
+              </p>
+            )}
             <div style={sx("display:inline-flex;gap:14px;margin-bottom:30px")}>
               <div style={sx("padding:16px 26px;border-radius:20px;background:#fff;box-shadow:inset 0 -4px 8px rgba(17,74,68,.05),inset 0 4px 7px rgba(255,255,255,.9),0 10px 22px -12px rgba(17,74,68,.2)")}>
-                <div className="disp" style={sx("font-size:26px;font-weight:800;color:#14b8a6")}>+{s.earned}</div>
-                <div style={sx("font-size:12.5px;color:#8b9c97;font-weight:700")}>XP отримано</div>
+                <div className="disp" style={sx("font-size:26px;font-weight:800;color:#14b8a6")}>{s.earned > 0 ? `+${s.earned}` : "0"}</div>
+                <div style={sx("font-size:12.5px;color:#8b9c97;font-weight:700")}>{s.earned > 0 ? "XP отримано" : "XP цього разу"}</div>
               </div>
               <div style={sx("padding:16px 26px;border-radius:20px;background:#fff;box-shadow:inset 0 -4px 8px rgba(17,74,68,.05),inset 0 4px 7px rgba(255,255,255,.9),0 10px 22px -12px rgba(17,74,68,.2)")}>
                 <div className="disp" style={sx("font-size:26px;font-weight:800;color:#f2994a")}>
