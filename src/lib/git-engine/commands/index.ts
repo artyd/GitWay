@@ -53,8 +53,9 @@ function gitUsage() {
   return [
     { text: "usage: git <command> [<args>]", tone: "meta" as const },
     { text: "" },
-    { text: "Основні команди: init, add, commit, status, log, diff,", tone: "hint" as const },
-    { text: "branch, checkout, switch, merge, rebase, stash, remote, push, pull, clone.", tone: "hint" as const },
+    { text: "Основні команди: init, add, commit, status, log, diff, show,", tone: "hint" as const },
+    { text: "branch, checkout, switch, merge, rebase, reset, restore, revert,", tone: "hint" as const },
+    { text: "cherry-pick, tag, stash, rm, clean, reflog, remote, push, pull, clone.", tone: "hint" as const },
   ];
 }
 
@@ -62,7 +63,9 @@ function helpLines() {
   return [
     { text: "Доступні команди:", tone: "meta" as const },
     { text: "  Файли:  cd ls pwd mkdir rm touch cat echo mv cp clear" },
-    { text: "  Git:    git init/add/commit/status/log/diff/branch/checkout/switch/merge/rebase/stash/remote/push/pull/clone" },
+    { text: "  Git:    init add commit status log diff show branch checkout switch merge" },
+    { text: "          rebase reset restore revert cherry-pick tag stash rm clean reflog" },
+    { text: "          remote push pull fetch clone config" },
   ];
 }
 

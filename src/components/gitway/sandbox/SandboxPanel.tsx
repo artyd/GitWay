@@ -6,6 +6,7 @@ import { Icon } from "../ui";
 import type { GitEngine } from "@/lib/git-engine/store";
 import { LESSONS } from "@/lib/gitway-data";
 import { complete } from "@/lib/git-engine/complete";
+import { gitHighlight } from "@/lib/git-engine/highlight";
 import { Terminal } from "./Terminal";
 import { GitHubClone } from "./GitHubClone";
 
@@ -83,6 +84,7 @@ export function SandboxPanel({ engine, account }: { engine: GitEngine; account: 
             backend={engine}
             account={account}
             complete={(line, cursor) => complete(line, cursor, engine.workspace())}
+            highlightLine={gitHighlight}
           />
         </div>
         <div style={sx("flex:1 1 460px;min-width:0;height:min(78vh,860px);min-height:520px")}>

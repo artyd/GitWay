@@ -29,6 +29,7 @@ export function freshRepo(id: string, name: string, root: string): Repo {
     nextIssueNumber: 1,
     config: DEFAULT_CONFIG(),
     initialized: false,
+    reflog: [],
   };
 }
 

@@ -165,9 +165,9 @@ export function currentBranch(repo: Repo): string | null {
   return repo.head.type === "branch" ? repo.head.branch : null;
 }
 
-/** Резолвить назву/oid у commit oid. Підтримує гілки, віддалені гілки, теги, HEAD, короткий oid. */
-export function resolveRef(repo: Repo, ref: string): Oid | null {
-  if (ref === "HEAD") return headCommitOid(repo);
+/** Базовий резолвер БЕЗ суфіксів ~/^: гілки, віддалені гілки, теги, HEAD, короткий oid. */
+function resolveBase(repo: Repo, ref: string): Oid | null {
+  if (ref === "HEAD" || ref === "@") return headCommitOid(repo);
   if (repo.branches[ref]) return repo.branches[ref];
   if (repo.remoteBranches[ref]) return repo.remoteBranches[ref];
   if (repo.tags[ref]) return repo.tags[ref];
@@ -180,6 +180,54 @@ export function resolveRef(repo: Repo, ref: string): Oid | null {
     if (matches.length === 1) return matches[0];
   }
   return null;
+}
+
+/**
+ * Резолвить назву/oid у commit oid. Підтримує гілки, віддалені гілки, теги,
+ * HEAD, короткий oid ТА синтаксис ревізій:
+ *   X^      — перший батько X
+ *   X^n     — n-й батько X (X^0 — сам X)
+ *   X~ / X~n — n-те покоління предків по першому батьку (X~2 = X^^)
+ * Оператори застосовуються зліва направо: HEAD~2^2, main~1 тощо.
+ */
+export function resolveRef(repo: Repo, ref: string): Oid | null {
+  const cut = ref.search(/[~^]/);
+  const baseName = cut === -1 ? ref : ref.slice(0, cut);
+  let oid = resolveBase(repo, baseName === "" ? "HEAD" : baseName);
+  if (oid == null) return null;
+  if (cut === -1) return oid;
+
+  const suffix = ref.slice(cut);
+  const re = /(~|\^)(\d*)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(suffix)) !== null) {
+    const op = m[1];
+    const n = m[2] === "" ? 1 : parseInt(m[2], 10);
+    if (op === "^") {
+      if (n === 0) continue; // X^0 — сам коміт
+      const c = readCommit(repo, oid);
+      const p = c?.parents[n - 1];
+      if (!p) return null;
+      oid = p;
+    } else {
+      for (let k = 0; k < n; k++) {
+        const c = readCommit(repo, oid);
+        if (!c || !c.parents.length) return null;
+        oid = c.parents[0];
+      }
+    }
+  }
+  return oid;
+}
+
+// ---------- reflog ----------
+
+/** Дописує запис у журнал переміщень HEAD (найновіший — попереду, HEAD@{0}). */
+export function recordReflog(repo: Repo, oid: Oid | null, message: string, when = 0): void {
+  if (!oid) return;
+  if (!repo.reflog) repo.reflog = [];
+  repo.reflog.unshift({ oid, message, when });
+  if (repo.reflog.length > 200) repo.reflog.length = 200;
 }
 
 // ---------- досяжність (для push/pull/clone та GC) ----------

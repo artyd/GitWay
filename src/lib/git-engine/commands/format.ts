@@ -116,7 +116,23 @@ function branchRefs(repo: Repo): Record<string, string[]> {
     const oid = repo.remoteBranches[rb];
     (map[oid] ??= []).push(rb);
   }
+  for (const t of Object.keys(repo.tags)) {
+    const oid = repo.tags[t];
+    (map[oid] ??= []).push("tag: " + t);
+  }
   return map;
+}
+
+/** Додає ліву графову колонку (спрощено) до вже відформатованого логу. */
+export function graphify(lines: OutLine[], oneline: boolean): OutLine[] {
+  if (oneline) return lines.map((l) => ({ ...l, text: "* " + l.text }));
+  return lines.map((l) =>
+    l.text.startsWith("commit ")
+      ? { ...l, text: "* " + l.text }
+      : l.text === ""
+        ? { ...l, text: "|" }
+        : { ...l, text: "| " + l.text },
+  );
 }
 
 export function firstLine(s: string): string {
