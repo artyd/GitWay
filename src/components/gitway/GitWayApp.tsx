@@ -37,21 +37,29 @@ const FALLBACK_ACCOUNT: Account = toAccount(PEOPLE[0]);
 type SavedProgress = { completed: number[]; current: number; xp: number; streak: number; trKnown: string[] };
 
 // Прогрес — на сервері (спільна БД). Локально нічого не тримаємо, щоб рейтинг був єдиним.
-async function fetchProgress(userId: string): Promise<SavedProgress | null> {
+// ВАЖЛИВО: розрізняємо «сервер відповів, прогресу ще нема» (ok:true, progress:null)
+// і «запит не вдався» (ok:false). Інакше під час деплою (кілька секунд, поки застосунок
+// перезапускається / БД не готова) запит падає, а автозбереження затирає РЕАЛЬНИЙ прогрес
+// нулями. Тому автозбереження вмикаємо лише коли сервер реально відповів.
+type FetchResult = { ok: true; progress: SavedProgress | null } | { ok: false };
+async function fetchProgress(userId: string): Promise<FetchResult> {
   try {
     const r = await fetch(`/api/progress?user=${encodeURIComponent(userId)}`, { cache: "no-store" });
-    if (!r.ok) return null;
+    if (!r.ok) return { ok: false };
     const p = (await r.json()).progress;
-    if (!p) return null;
+    if (!p) return { ok: true, progress: null };
     return {
-      completed: p.completed ?? [],
-      current: p.current ?? 1,
-      xp: p.xp ?? 0,
-      streak: p.streak ?? 0,
-      trKnown: p.trKnown ?? [],
+      ok: true,
+      progress: {
+        completed: p.completed ?? [],
+        current: p.current ?? 1,
+        xp: p.xp ?? 0,
+        streak: p.streak ?? 0,
+        trKnown: p.trKnown ?? [],
+      },
     };
   } catch {
-    return null;
+    return { ok: false };
   }
 }
 async function postProgress(acc: Account, data: SavedProgress): Promise<void> {
@@ -240,15 +248,20 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
     setEngine(new GitEngine(ws, Date.now));
     scrollTop();
     // Підтягуємо збережений прогрес із сервера і лише тоді дозволяємо автозбереження.
-    fetchProgress(acc.id).then((saved) => {
-      if (saved) {
+    fetchProgress(acc.id).then((res) => {
+      if (!res.ok) {
+        // Сервер недоступний (напр. під час деплою). НЕ вмикаємо автозбереження,
+        // щоб не затерти збережений прогрес нулями. Користувач перезайде — підтягнеться.
+        return;
+      }
+      if (res.progress) {
         set({
-          completed: saved.completed,
-          current: saved.current,
-          activeId: saved.current,
-          xp: saved.xp,
-          streak: saved.streak,
-          trKnown: saved.trKnown,
+          completed: res.progress.completed,
+          current: res.progress.current,
+          activeId: res.progress.current,
+          xp: res.progress.xp,
+          streak: res.progress.streak,
+          trKnown: res.progress.trKnown,
         });
       }
       hydratedRef.current = true;

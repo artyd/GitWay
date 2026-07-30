@@ -71,6 +71,10 @@ export async function getProgress(userId: string): Promise<ProgressRow | null> {
   return rows.length ? mapRow(rows[0]) : null;
 }
 
+// Прогрес МОНОТОННИЙ: XP тільки зростає, пройдені уроки й вивчені картки лише
+// додаються, current лише просувається вперед. Тому при конфлікті беремо максимум/
+// обʼєднання, а НЕ сліпо EXCLUDED. Це другий рубіж захисту: навіть якщо клієнт
+// надішле нульовий/старіший стан (напр. збій під час деплою), рядок у БД не обнулиться.
 export async function upsertProgress(p: ProgressRow): Promise<void> {
   await ensureSchema();
   await getPool().query(
@@ -78,8 +82,14 @@ export async function upsertProgress(p: ProgressRow): Promise<void> {
      VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7,$8,$9::jsonb, now())
      ON CONFLICT (user_id) DO UPDATE SET
        name = EXCLUDED.name, department = EXCLUDED.department, dept_key = EXCLUDED.dept_key,
-       completed = EXCLUDED.completed, current = EXCLUDED.current, xp = EXCLUDED.xp,
-       streak = EXCLUDED.streak, tr_known = EXCLUDED.tr_known, updated_at = now()`,
+       xp      = GREATEST(progress.xp, EXCLUDED.xp),
+       current = GREATEST(progress.current, EXCLUDED.current),
+       streak  = GREATEST(progress.streak, EXCLUDED.streak),
+       completed = (SELECT COALESCE(jsonb_agg(DISTINCT e ORDER BY e), '[]'::jsonb)
+                    FROM jsonb_array_elements(progress.completed || EXCLUDED.completed) AS e),
+       tr_known  = (SELECT COALESCE(jsonb_agg(DISTINCT e), '[]'::jsonb)
+                    FROM jsonb_array_elements(progress.tr_known || EXCLUDED.tr_known) AS e),
+       updated_at = now()`,
     [
       p.userId, p.name, p.department, p.deptKey,
       JSON.stringify(p.completed ?? []), p.current ?? 1, p.xp ?? 0, p.streak ?? 0,
