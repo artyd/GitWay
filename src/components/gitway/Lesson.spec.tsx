@@ -15,10 +15,14 @@ beforeEach(() => {
 async function openFirstClaudeLesson() {
   render(<GitWayApp />);
   login();
-  // урок зʼявляється після підтягування прогресу з сервера (мок)
+  // Спершу дочекатися, поки підтягнеться прогрес із сервера (мок): доти фаза 4
+  // ще заблокована, і клік по картці уроку не відкриє його. Ознака — нарахований XP.
+  await screen.findByText(/720/);
   const title = await screen.findByText("Що таке Claude Code і навіщо він потрібен");
   const btn = title.parentElement!.querySelector("button");
   fireEvent.click(btn!);
+  // дочекатися, поки відкриється сторінка уроку
+  await screen.findByText(/Урок 1 з 12/);
 }
 
 describe("CLI-урок: реальний контент + командний квіз", () => {
@@ -27,7 +31,7 @@ describe("CLI-урок: реальний контент + командний к�
     // на сторінці уроку є номер у межах курсу
     expect(screen.getByText(/Урок 1 з 12/)).toBeTruthy();
     // реальний опис із файлу
-    expect(screen.getByText(/інструмент від компанії/)).toBeTruthy();
+    expect(screen.getByText(/розумним помічником/)).toBeTruthy();
     // порожнього відео-слоту немає (відео поки не додано)
     expect(screen.queryByText("Відео-слот")).toBeNull();
     // блоковий рендер: зведення команд уроку + інлайн-підсвітка тієї ж команди в тексті
@@ -44,7 +48,7 @@ describe("CLI-урок: реальний контент + командний к�
     // клікаємо правильний варіант (офіційний install-скрипт)
     fireEvent.click(screen.getByText(/curl -fsSL https:\/\/claude\.ai\/install\.sh/));
     expect(screen.getByText(/Правильно!/)).toBeTruthy();
-    expect(screen.getByText(/нативний інсталятор/)).toBeTruthy(); // пояснення з файлу
+    expect(screen.getByText(/найшвидша версія/)).toBeTruthy(); // пояснення з файлу
   });
 
   it("ввід команди — додатковий спосіб відповісти (теж зараховується)", async () => {
