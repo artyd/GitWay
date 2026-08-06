@@ -29,5 +29,15 @@ describe("Екран входу — крок 1 (відділ) → крок 2 (П
     fireEvent.click(screen.getByText("Продажі"));
     expect(screen.getByText("Походенко Осорио")).toBeTruthy();
     expect(screen.getByText("Костенко Татьяна")).toBeTruthy();
+    expect(screen.getByText("Дунас Анжела")).toBeTruthy();
+  });
+
+  it("у відділі «Продажі» блоки викладені сіткою 4 колонки", () => {
+    render(<GitWayApp />);
+    fireEvent.click(screen.getByText("Продажі"));
+    const card = screen.getByText("Дунас Анжела").closest("button")!;
+    const list = card.parentElement!;
+    expect(list.style.display).toBe("grid");
+    expect(list.style.gridTemplateColumns).toBe("repeat(4,1fr)");
   });
 });

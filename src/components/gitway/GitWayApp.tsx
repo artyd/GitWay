@@ -527,20 +527,27 @@ export default function GitWayApp({ showLeaderboard = true }: { showLeaderboard?
           >
             <Icon name="fa-solid fa-arrow-left" /> Інший відділ
           </button>
-          <div style={sx("display:flex;flex-wrap:wrap;justify-content:center;gap:12px;width:100%;max-width:760px")}>
+          <div
+            style={sx(
+              selectedDept.key === "prodazhi"
+                ? "display:grid;grid-template-columns:repeat(4,1fr);gap:12px;width:100%;max-width:960px"
+                : "display:flex;flex-wrap:wrap;justify-content:center;gap:12px;width:100%;max-width:760px"
+            )}
+          >
             {peopleByDept(selectedDept.key).map((p) => {
               const acc = toAccount(p);
+              const gridCard = selectedDept.key === "prodazhi";
               return (
                 <Clay
                   key={acc.id}
                   onClick={() => selectAccount(acc)}
-                  base="display:flex;align-items:center;gap:12px;text-align:left;min-width:240px;padding:14px 18px;border:none;cursor:pointer;border-radius:18px;background:#fff;transition:transform .16s,box-shadow .16s;box-shadow:0 12px 26px -18px rgba(17,74,68,.3),inset 0 -4px 9px rgba(17,74,68,.04),inset 0 5px 9px rgba(255,255,255,.9)"
+                  base={`display:flex;align-items:center;gap:12px;text-align:left;${gridCard ? "min-width:0;width:100%;" : "min-width:240px;"}padding:14px 18px;border:none;cursor:pointer;border-radius:18px;background:#fff;transition:transform .16s,box-shadow .16s;box-shadow:0 12px 26px -18px rgba(17,74,68,.3),inset 0 -4px 9px rgba(17,74,68,.04),inset 0 5px 9px rgba(255,255,255,.9)`}
                   hover="transform:translateY(-3px);box-shadow:0 20px 34px -18px rgba(17,74,68,.35),inset 0 -4px 9px rgba(17,74,68,.04),inset 0 5px 9px rgba(255,255,255,.9)"
                 >
                   <span style={sx(`display:grid;place-items:center;width:46px;height:46px;border-radius:50%;color:#fff;font-weight:800;font-size:15px;flex:none;background:${acc.color};box-shadow:inset 0 -3px 6px rgba(0,0,0,.12),inset 0 3px 5px rgba(255,255,255,.35)`)}>
                     {acc.initials}
                   </span>
-                  <span style={sx("font-weight:800;font-size:15px;color:#14332f")}>{acc.name}</span>
+                  <span style={sx("font-weight:800;font-size:15px;color:#14332f;min-width:0;line-height:1.25")}>{acc.name}</span>
                 </Clay>
               );
             })}
