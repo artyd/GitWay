@@ -20,9 +20,9 @@ function req(qs: string) {
 
 describe("GET /api/leaderboard?mode=dept — рейтинг відділів (середній XP на учасника)", () => {
   it("ділить суму XP відділу на кількість людей у роестрі та сортує за середнім", async () => {
-    // prodazhi: 11 людей, сума 2200 → середній 200; it: 3 людини, сума 300 → середній 100.
+    // prodazhi: 12 людей, сума 2400 → середній 200; it: 3 людини, сума 300 → середній 100.
     mocks.xpTotalsByDept.mockResolvedValue([
-      { deptKey: "prodazhi", totalXp: 2200 },
+      { deptKey: "prodazhi", totalXp: 2400 },
       { deptKey: "it", totalXp: 300 },
     ]);
 
@@ -36,10 +36,10 @@ describe("GET /api/leaderboard?mode=dept — рейтинг відділів (с
     const top = body.rows[0];
     expect(top.id).toBe("prodazhi");
     expect(top.rank).toBe(1);
-    expect(top.count).toBe(peopleByDept("prodazhi").length); // 11
-    expect(top.totalXp).toBe(2200);
-    expect(top.xp).toBe(200); // 2200 / 11
-    expect(top.department).toContain("11 учасників");
+    expect(top.count).toBe(peopleByDept("prodazhi").length); // 12
+    expect(top.totalXp).toBe(2400);
+    expect(top.xp).toBe(200); // 2400 / 12
+    expect(top.department).toContain("12 учасників");
 
     const it = body.rows.find((r: { id: string }) => r.id === "it");
     expect(it.xp).toBe(100); // 300 / 3

@@ -24,9 +24,9 @@ describe("glossary matcher", () => {
     expect(terms).toContain("merge conflict");
   });
 
-  it("підсвічує лише перше входження кожного терміна", () => {
+  it("підсвічує КОЖНЕ входження терміна (не лише перше)", () => {
     const m = findTermMatches("коміт, ще коміт і знову коміт");
-    expect(m.length).toBe(1);
+    expect(m.length).toBe(3);
     expect(m[0].start).toBe(0);
   });
 
