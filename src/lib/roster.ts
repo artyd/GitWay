@@ -42,7 +42,6 @@ export const PEOPLE: Person[] = [
   { name: "Пермякова Инна", deptKey: "prodazhi" },
   { name: "Озерова Виктория", deptKey: "prodazhi" },
   { name: "Ярцева Леся", deptKey: "prodazhi" },
-  { name: "Походенко Осорио", deptKey: "prodazhi" },
   { name: "Костенко Татьяна", deptKey: "prodazhi" },
   { name: "Дунас Анжела", deptKey: "prodazhi" },
 
@@ -58,6 +57,7 @@ export const PEOPLE: Person[] = [
   { name: "Верещагина Виктория", deptKey: "legal" },
 
   { name: "Мороз Ольга Валентиновна", deptKey: "director" },
+  { name: "Зубар Станіслав Володимирович", deptKey: "director" },
 ];
 
 const DEPT_BY_KEY = new Map(DEPARTMENTS.map((d) => [d.key, d]));
