@@ -17,7 +17,7 @@ describe("Екран входу — крок 1 (відділ) → крок 2 (П
   it("крок 2 показує ПІБ учасників обраного відділу", () => {
     render(<GitWayApp />);
     fireEvent.click(screen.getByText("Логістика"));
-    expect(screen.getByText("Волкова Елена Николаевна")).toBeTruthy();
+    expect(screen.getByText("Романова Олеся")).toBeTruthy();
     expect(screen.getByText("Субота Карина")).toBeTruthy();
     // повернення до вибору відділу
     fireEvent.click(screen.getByText("Інший відділ"));
